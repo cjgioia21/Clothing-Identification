@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clothing-id"
+version = "0.1.0"
+description = "Identify a garment from its tag and its appearance, then estimate a rough resale value."
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic>=0.40",
+    "pydantic>=2.5",
+    "pillow>=10.0",
+]
+
+[project.optional-dependencies]
+api = ["fastapi>=0.110", "uvicorn>=0.27", "python-multipart>=0.0.9"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+clothing-id = "clothing_id.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["clothing_id*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
