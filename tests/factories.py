@@ -1,5 +1,9 @@
 """Sample reads used by the tests."""
 
+from datetime import date, timedelta
+from typing import List
+
+from clothing_id.history import Observation
 from clothing_id.models import (
     FiberContent,
     GarmentRead,
@@ -35,3 +39,33 @@ def make_read(**overrides) -> GarmentRead:
     for field, value in overrides.items():
         setattr(read, field, value)
     return read
+
+
+def sold_series(
+    prices: List[float],
+    kind: str = "sold",
+    brand: str = "Gap",
+    category: str = "t-shirt",
+    condition_grade: str = "good",
+    size: str = "M",
+    spacing_days: int = 10,
+    source: str = "ebay-sold",
+) -> List[Observation]:
+    """Real-looking observations: one price per listing, spaced back through time."""
+    today = date.today()
+    return [
+        Observation(
+            source=source,
+            source_id=f"{source}-{index}-{price}",
+            kind=kind,
+            price=float(price),
+            observed_on=today - timedelta(days=spacing_days * index),
+            brand=brand,
+            category=category,
+            size=size,
+            condition_grade=condition_grade,
+            title=f"{brand} {category}",
+            url=f"https://example.com/item/{index}",
+        )
+        for index, price in enumerate(prices)
+    ]

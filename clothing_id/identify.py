@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import json
 from typing import List, Optional, Sequence
 
-from pydantic import BaseModel, Field
-
-from .models import Comparable, GarmentRead
+from .models import GarmentRead
 
 DEFAULT_MODEL = "claude-opus-5"
 MAX_TOKENS = 16000
@@ -40,18 +37,6 @@ when you are largely guessing from silhouette.
 
 Rules: report only what the images support, prefer null over a guess, and keep \
 `reasoning` to a few sentences naming the specific evidence you used."""
-
-COMPS_SYSTEM = """You price secondhand clothing. Search current and recently sold \
-listings for the specific item described, on the resale market (eBay sold, Grailed, \
-Depop, Poshmark, Vestiaire, StockX). Return up to 8 comparable listings with their \
-asking or sold price in USD. Only include listings for the same brand and the same kind \
-of garment; skip anything whose price you cannot read. Prefer sold prices over asks."""
-
-
-class _Comparables(BaseModel):
-    comparables: List[Comparable] = Field(default_factory=list)
-    search_notes: str = ""
-
 
 def _client(client=None):
     if client is not None:
@@ -100,56 +85,3 @@ def identify_garment(
     if parsed is None:
         raise RuntimeError("The model returned no structured output.")
     return parsed
-
-
-def find_comparables(
-    read: GarmentRead,
-    client=None,
-    model: str = DEFAULT_MODEL,
-    max_results: int = 8,
-) -> List[Comparable]:
-    """Look up live resale comps with the server-side web search tool.
-
-    Returns an empty list if the search finds nothing usable - callers should
-    treat comps as an optional anchor, not a requirement.
-    """
-    ident = read.identification
-    query = {
-        "brand": ident.brand,
-        "sub_label": ident.sub_label,
-        "item": ident.item_name,
-        "category": ident.category,
-        "era": ident.era,
-        "size": read.tag.size,
-        "color": read.visual.primary_color,
-        "condition": read.visual.condition_grade,
-        "rarity_signals": ident.rarity_signals,
-    }
-
-    response = _client(client).messages.parse(
-        model=model,
-        max_tokens=MAX_TOKENS,
-        system=COMPS_SYSTEM,
-        messages=[
-            {
-                "role": "user",
-                "content": (
-                    "Find resale comparables for this item and report up to "
-                    f"{max_results} with prices:\n{json.dumps(query, indent=2)}"
-                ),
-            }
-        ],
-        tools=[
-            {
-                "type": "web_search_20260209",
-                "name": "web_search",
-                "max_uses": 5,
-            }
-        ],
-        output_format=_Comparables,
-    )
-    _guard(response)
-    parsed = response.parsed_output
-    if parsed is None:
-        return []
-    return [c for c in parsed.comparables if c.price and c.price > 0][:max_results]

@@ -1,6 +1,6 @@
 import pytest
 
-from clothing_id.models import Comparable, FiberContent
+from clothing_id.models import FiberContent
 from clothing_id.valuation import (
     FLAW_FLOOR,
     RARITY_CAP,
@@ -9,7 +9,7 @@ from clothing_id.valuation import (
     size_multiplier,
 )
 
-from tests.factories import make_read
+from tests.factories import make_read, sold_series
 
 
 def test_range_is_ordered_and_positive(read):
@@ -77,19 +77,46 @@ def test_flaws_reduce_value_with_a_floor(read):
     assert damaged >= baseline * FLAW_FLOOR - 0.01  # cents lost to rounding
 
 
-def test_comparables_pull_the_estimate_toward_the_market(read):
+def test_observed_sales_replace_the_model(read):
     without = estimate_value(read)
-    with_comps = estimate_value(
-        read,
-        comparables=[
-            Comparable(title="Gap tee", price=200, source="eBay"),
-            Comparable(title="Gap tee", price=220, source="eBay"),
-            Comparable(title="Gap tee", price=180, source="Grailed"),
-        ],
-    )
-    assert with_comps.mid > without.mid
-    assert with_comps.confidence >= without.confidence
-    assert any(f.name == "market comparables" for f in with_comps.factors)
+    assert without.method == "modeled"
+
+    with_data = estimate_value(read, observations=sold_series([200, 220, 180, 205, 195, 210]))
+    assert with_data.method == "observed"
+    assert with_data.mid > without.mid
+    assert with_data.market_price and with_data.model_price
+    assert with_data.evidence.sold_count == 6
+    assert any(f.name == "observed market" for f in with_data.factors)
+
+
+def test_thin_data_is_blended_not_trusted_outright(read):
+    model_only = estimate_value(read).mid
+    blended = estimate_value(read, observations=sold_series([400, 420, 380]))
+    assert blended.method == "blended"
+    assert model_only < blended.mid < 400
+    assert any("Thin market data" in n for n in blended.notes)
+
+
+def test_a_single_listing_is_not_enough_to_price_from(read):
+    value = estimate_value(read, observations=sold_series([500]))
+    assert value.method == "modeled"
+    assert value.comparables and value.comparables[0].price == 500
+    assert any("too few to price" in n for n in value.notes)
+
+
+def test_band_comes_from_the_sample_not_a_fudge_factor(read):
+    tight = estimate_value(read, observations=sold_series([100, 102, 98, 101, 99, 100]))
+    wide = estimate_value(read, observations=sold_series([40, 260, 90, 180, 60, 220]))
+    assert tight.method == wide.method == "observed"
+    assert (tight.high - tight.low) < (wide.high - wide.low)
+
+
+def test_asking_prices_are_discounted_to_sold_terms(read):
+    sold = estimate_value(read, observations=sold_series([100] * 6))
+    asks = estimate_value(read, observations=sold_series([100] * 6, kind="ask"))
+    assert asks.mid < sold.mid
+    assert asks.evidence.ask_count == 6
+    assert any("asking prices" in n for n in asks.notes)
 
 
 def test_lower_confidence_widens_the_band(read):

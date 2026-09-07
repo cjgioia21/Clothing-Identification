@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -49,6 +49,8 @@ ConditionGrade = Literal[
     "poor",  # damaged, sold for parts or heavy discount
     "unknown",
 ]
+
+Method = Literal["observed", "blended", "modeled"]
 
 Era = Literal[
     "pre-1970",
@@ -157,21 +159,78 @@ class ValueFactor(BaseModel):
 
 
 class Comparable(BaseModel):
+    """A real listing the estimate was built from."""
+
     title: str
     price: Optional[float] = None
-    source: Optional[str] = None
+    source: Optional[str] = Field(default=None, description="ebay-sold, web-search, import, ...")
     url: Optional[str] = None
+    sold: bool = Field(default=False, description="True for a completed sale, False for an ask")
+    observed_on: Optional[str] = Field(default=None, description="Date of the sale or listing")
+    condition: Optional[str] = None
+    size: Optional[str] = None
+
+
+class MarketEvidence(BaseModel):
+    """What the market data behind an estimate actually consisted of."""
+
+    observation_count: int = 0
+    sold_count: int = 0
+    ask_count: int = 0
+    effective_n: float = Field(
+        default=0.0, description="Sample size after recency and evidence-quality weighting"
+    )
+    first_observed: Optional[str] = None
+    last_observed: Optional[str] = None
+    raw_median: float = 0.0
+    dispersion: float = Field(default=0.0, description="(p80 - p20) / mid of the sample")
+    annual_trend: Optional[float] = Field(
+        default=None, description="Fitted price drift per year, e.g. -0.08 = down 8%/yr"
+    )
+    condition_ratios_source: str = "priors"
+    ask_ratio: float = 0.82
+    ask_ratio_source: str = "prior"
+    outliers_dropped: int = 0
+    sources: Dict[str, int] = Field(default_factory=dict)
 
 
 class ValueEstimate(BaseModel):
     currency: str = "USD"
+    method: Method = Field(
+        default="modeled",
+        description="observed = priced from real sales; blended = thin data plus the "
+        "model; modeled = no market data was available",
+    )
     retail_estimate: float = Field(description="Estimated original/new retail price")
     low: float
     mid: float
     high: float
     confidence: float = Field(ge=0.0, le=1.0)
+    market_price: Optional[float] = Field(
+        default=None, description="Price implied by observed sales alone"
+    )
+    model_price: Optional[float] = Field(
+        default=None, description="Price implied by the heuristic model alone"
+    )
+    evidence: Optional[MarketEvidence] = None
     factors: List[ValueFactor] = Field(default_factory=list)
     comparables: List[Comparable] = Field(default_factory=list)
+    notes: List[str] = Field(default_factory=list)
+
+
+class Verification(BaseModel):
+    """Hard checks against outside records, not model judgement."""
+
+    rn_number: Optional[str] = None
+    registrant: Optional[str] = Field(
+        default=None, description="Company the RN is registered to, per the RN directory"
+    )
+    brand_matches_rn: Optional[bool] = Field(
+        default=None, description="None when the RN could not be checked"
+    )
+    lookup_url: Optional[str] = Field(
+        default=None, description="FTC RN database URL for checking the number by hand"
+    )
     notes: List[str] = Field(default_factory=list)
 
 
@@ -180,6 +239,7 @@ class Report(BaseModel):
     tag: TagRead
     visual: VisualRead
     value: ValueEstimate
+    verification: Verification = Field(default_factory=Verification)
 
     def summary(self) -> str:
         v = self.value
@@ -191,5 +251,11 @@ class Report(BaseModel):
             f"condition: {self.visual.condition_grade}",
             f"size: {self.tag.size or 'unknown'}",
             f"estimated resale: ${v.low:,.0f}-${v.high:,.0f} (mid ${v.mid:,.0f} {v.currency})",
+            f"basis: {v.method}"
+            + (
+                f" on {v.evidence.observation_count} listings"
+                if v.evidence and v.evidence.observation_count
+                else ""
+            ),
         ]
         return " | ".join(bits)

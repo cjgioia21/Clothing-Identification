@@ -1,25 +1,43 @@
-"""Rough resale valuation from an identified garment.
+"""Turn an identified garment into a price.
 
-The estimate is deterministic and auditable: every multiplier that moves the
-number is recorded as a ValueFactor so the output can explain itself.
+Order of preference, and every estimate says which one it used:
 
-    retail   = category baseline x brand tier x fabric x construction
-    resale   = retail x tier recovery x condition x era x rarity x size x demand
+* **observed** - priced from real transactions (`pricing.price_from_observations`).
+  Comparable sales are adjusted onto the target's condition, asking prices are
+  discounted to sold terms, older sales are carried forward by a fitted price
+  trend, and the reported band is the sample's own 20th-80th percentile.
+* **blended** - too few observations to stand alone, so the observed price and
+  the model below are combined in proportion to how much evidence there is.
+* **modeled** - no market data was available. A heuristic fallback:
+
+      retail = category baseline x brand tier x fabric x construction
+      resale = retail x tier recovery x condition x era x rarity x flaws x size
+
+  Every multiplier is reported in `value.factors` so the number can be audited,
+  but it is an informed guess, not evidence, and is labelled as such.
 """
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional
+from dataclasses import dataclass, field as dataclass_field
+from typing import Dict, Iterable, List, Optional, Sequence
 
 from .brands import Tier, lookup_tier
+from .history import Observation
 from .models import (
     Comparable,
     ConditionGrade,
     Era,
     FiberContent,
     GarmentRead,
+    MarketEvidence,
     ValueEstimate,
     ValueFactor,
+)
+from .pricing import (
+    MarketBasis,
+    confidence_from_basis,
+    price_from_observations,
 )
 
 # Baseline new-retail price in USD for a mainstream-tier item of each category.
@@ -296,12 +314,19 @@ def _median(values: List[float]) -> float:
     return (ordered[mid - 1] + ordered[mid]) / 2
 
 
-def estimate_value(
-    read: GarmentRead,
-    comparables: Optional[List[Comparable]] = None,
-    currency: str = "USD",
-) -> ValueEstimate:
-    """Price a garment from its structured read, optionally anchored to comps."""
+@dataclass
+class ModelEstimate:
+    """The heuristic fallback: what the tables think an item like this is worth."""
+
+    retail: float
+    mid: float
+    confidence: float
+    factors: List[ValueFactor] = dataclass_field(default_factory=list)
+    notes: List[str] = dataclass_field(default_factory=list)
+
+
+def model_estimate(read: GarmentRead) -> ModelEstimate:
+    """Price from brand/category/condition tables when no market data exists."""
     tag, visual, ident = read.tag, read.visual, read.identification
     factors: List[ValueFactor] = []
     notes: List[str] = []
@@ -416,32 +441,167 @@ def estimate_value(
         notes.append("Condition not assessable from the photos; assumed light wear.")
     confidence = min(max(confidence, 0.05), 0.95)
 
-    comparables = comparables or []
-    priced_comps = [c.price for c in comparables if c.price and c.price > 0]
-    if priced_comps:
-        comp_median = _median(priced_comps)
-        blended = 0.45 * mid + 0.55 * comp_median
-        factors.append(
-            ValueFactor(
-                name="market comparables",
-                multiplier=round(blended / mid, 3) if mid else 1.0,
-                note=f"{len(priced_comps)} listings, median ${comp_median:,.0f}",
-            )
-        )
-        mid = blended
-        confidence = min(0.95, confidence + 0.1)
-
-    low_f, high_f = _spread(confidence)
+    low_f, high_f = _spread(confidence)  # noqa: F841 - band is applied by the caller
     mid = max(mid, 1.0)
 
-    return ValueEstimate(
-        currency=currency,
-        retail_estimate=round(retail, 2),
-        low=round(max(mid * low_f, 0.5), 2),
+    return ModelEstimate(
+        retail=round(retail, 2),
         mid=round(mid, 2),
-        high=round(mid * high_f, 2),
         confidence=round(confidence, 2),
         factors=factors,
-        comparables=comparables,
+        notes=notes,
+    )
+
+
+def _to_comparable(obs: Observation) -> Comparable:
+    return Comparable(
+        title=obs.title or f"{obs.brand or ''} {obs.category or ''}".strip(),
+        price=obs.price,
+        source=obs.source,
+        url=obs.url,
+        sold=obs.kind == "sold",
+        observed_on=obs.observed_on.isoformat(),
+        condition=obs.condition_grade,
+        size=obs.size,
+    )
+
+
+def _to_evidence(basis: MarketBasis) -> MarketEvidence:
+    return MarketEvidence(
+        observation_count=basis.observation_count,
+        sold_count=basis.sold_count,
+        ask_count=basis.ask_count,
+        effective_n=basis.effective_n,
+        first_observed=basis.first_observed.isoformat() if basis.first_observed else None,
+        last_observed=basis.last_observed.isoformat() if basis.last_observed else None,
+        raw_median=basis.raw_median,
+        dispersion=basis.dispersion,
+        annual_trend=basis.annual_trend,
+        condition_ratios_source=basis.condition_ratios_source,
+        ask_ratio=basis.ask_ratio,
+        ask_ratio_source=basis.ask_ratio_source,
+        outliers_dropped=basis.outliers_dropped,
+        sources=basis.sources,
+    )
+
+
+# Weighted sample size at which observations price the item on their own.
+FULL_EVIDENCE_N = 4.0
+
+
+def estimate_value(
+    read: GarmentRead,
+    observations: Optional[Sequence[Observation]] = None,
+    currency: str = "USD",
+    min_observations: int = 3,
+) -> ValueEstimate:
+    """Price a garment, preferring real transactions over the heuristic model.
+
+    `observations` are real listings and sales for comparable items - from the
+    local history database, a marketplace API, or a cited web search. With
+    enough of them the estimate is theirs alone; with a few it is blended; with
+    none it falls back to the model and says so.
+    """
+    model = model_estimate(read)
+    observations = list(observations or [])
+    factors = list(model.factors)
+    notes = list(model.notes)
+
+    basis = price_from_observations(
+        observations,
+        target_condition=read.visual.condition_grade,
+        target_size=read.tag.size,
+        min_observations=min_observations,
+    )
+
+    if basis is None:
+        low_f, high_f = _spread(model.confidence)
+        if observations:
+            notes.append(
+                f"Only {len(observations)} comparable listing(s) found - too few to price "
+                "from the market, so the heuristic model was used."
+            )
+        else:
+            notes.append(
+                "No market data available: this is a modeled estimate from brand and "
+                "category tables, not from observed sales."
+            )
+        return ValueEstimate(
+            currency=currency,
+            method="modeled",
+            retail_estimate=model.retail,
+            low=round(max(model.mid * low_f, 0.5), 2),
+            mid=model.mid,
+            high=round(model.mid * high_f, 2),
+            confidence=model.confidence,
+            model_price=model.mid,
+            factors=factors,
+            comparables=[_to_comparable(o) for o in observations],
+            notes=notes,
+        )
+
+    market_confidence = confidence_from_basis(basis)
+    evidence_weight = min(basis.effective_n / FULL_EVIDENCE_N, 1.0)
+    notes.extend(basis.notes)
+
+    factors.append(
+        ValueFactor(
+            name="observed market",
+            multiplier=round(basis.mid / model.mid, 3) if model.mid else 1.0,
+            note=(
+                f"{basis.sold_count} sold + {basis.ask_count} asking, "
+                f"{basis.date_range}, median ${basis.raw_median:,.0f}"
+            ),
+        )
+    )
+    if basis.annual_trend is not None:
+        factors.append(
+            ValueFactor(
+                name="price trend",
+                multiplier=round(1 + basis.annual_trend, 3),
+                note=f"{basis.annual_trend:+.1%} per year, fitted to the sample",
+            )
+        )
+    if basis.condition_ratios_source != "priors":
+        factors.append(
+            ValueFactor(
+                name="condition ratios",
+                multiplier=round(basis.condition_ratios.get(read.visual.condition_grade, 1.0), 3),
+                note=basis.condition_ratios_source,
+            )
+        )
+
+    if evidence_weight >= 1.0:
+        method = "observed"
+        mid = basis.mid
+        low, high = basis.low, basis.high
+        confidence = market_confidence
+    else:
+        method = "blended"
+        mid = evidence_weight * basis.mid + (1 - evidence_weight) * model.mid
+        low_f, high_f = _spread(min(market_confidence, model.confidence))
+        low = min(basis.low, mid * low_f)
+        high = max(basis.high, mid * high_f)
+        confidence = round(
+            evidence_weight * market_confidence + (1 - evidence_weight) * model.confidence, 2
+        )
+        notes.append(
+            f"Thin market data (effective sample {basis.effective_n:.1f}): "
+            f"{evidence_weight:.0%} observed, {1 - evidence_weight:.0%} modeled."
+        )
+
+    return ValueEstimate(
+        currency=basis.currency or currency,
+        method=method,
+        retail_estimate=model.retail,
+        low=round(max(min(low, mid), 0.5), 2),
+        mid=round(mid, 2),
+        high=round(max(high, mid), 2),
+        confidence=confidence,
+        market_price=basis.mid,
+        model_price=model.mid,
+        evidence=_to_evidence(basis),
+        factors=factors,
+        comparables=[_to_comparable(o) for o in observations][:25],
         notes=notes,
     )

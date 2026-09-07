@@ -67,7 +67,7 @@ INDEX_HTML = """<!doctype html>
     <input id="images" name="images" type="file" accept="image/*" multiple required>
     <label for="notes">Notes (optional)</label>
     <input id="notes" name="notes" type="text" placeholder="thrifted, small hole at the hem">
-    <div class="row"><input id="market" name="market_check" type="checkbox"><label for="market" style="margin:0;text-transform:none;letter-spacing:0;font-weight:400;">Search live resale listings (slower)</label></div>
+    <div class="row"><input id="market" name="market" type="checkbox" checked><label for="market" style="margin:0;text-transform:none;letter-spacing:0;font-weight:400;">Look up live resale listings (uncheck to price from stored history only)</label></div>
     <button type="submit">Identify</button>
   </form>
   <div id="out"></div>
@@ -84,7 +84,7 @@ f.addEventListener('submit', async e => {
   for (const file of document.getElementById('images').files) fd.append('images', file);
   const notes = document.getElementById('notes').value;
   if (notes) fd.append('notes', notes);
-  if (document.getElementById('market').checked) fd.append('market_check', 'true');
+  fd.append('market', document.getElementById('market').checked ? 'true' : 'false');
   try {
     const res = await fetch('/identify', { method: 'POST', body: fd });
     const data = await res.json();
@@ -101,7 +101,11 @@ function render(r) {
   const rows = v.factors.map(x =>
     `<tr><td>${esc(x.name)}${x.note ? ' <span style="color:var(--muted)">(' + esc(x.note) + ')</span>' : ''}</td>` +
     `<td class="m">${x.multiplier.toFixed(2)}</td></tr>`).join('');
+  const ev = v.evidence;
+  const basis = { observed: 'priced from observed sales', blended: 'observed sales + model',
+                  modeled: 'modeled \u2013 no market data' }[v.method];
   const facts = [
+    ['Basis', basis],
     ['Brand', i.brand || 'unidentified'], ['Line', i.sub_label], ['Category', i.category],
     ['Era', i.era], ['Size', t.size], ['Made in', t.country_of_origin],
     ['Color', vis.primary_color], ['Condition', vis.condition_grade],
@@ -109,12 +113,20 @@ function render(r) {
     ['Rarity', (i.rarity_signals || []).join(', ')],
     ['Est. retail', money(v.retail_estimate)],
     ['Confidence', Math.round(v.confidence * 100) + '%'],
-  ].filter(([, val]) => val).map(([k, val]) => `<dt>${k}</dt><dd>${esc(String(val))}</dd>`).join('');
+    ev ? ['Listings used', ev.observation_count + ' (' + ev.sold_count + ' sold, ' + ev.ask_count + ' asking)'] : ['', ''],
+    ev && ev.first_observed ? ['Covering', ev.first_observed + ' \u2192 ' + ev.last_observed] : ['', ''],
+    ev && ev.annual_trend != null ? ['Price trend', (ev.annual_trend * 100).toFixed(1) + '% / year'] : ['', ''],
+  ].filter(([k, val]) => k && val).map(([k, val]) => `<dt>${k}</dt><dd>${esc(String(val))}</dd>`).join('');
+  const comps = (v.comparables || []).slice(0, 10).map(c =>
+    `<tr><td>${c.url ? '<a href="' + esc(c.url) + '" target="_blank" rel="noopener">' + esc(c.title.slice(0, 60)) + '</a>' : esc(c.title.slice(0, 60))}` +
+    `<span style="color:var(--muted)"> ${c.sold ? 'sold' : 'ask'} ${esc(c.observed_on || '')}</span></td>` +
+    `<td class="m">${c.price ? money(c.price) : ''}</td></tr>`).join('');
   return `<div class="card">
     <div class="price">${money(v.mid)}</div>
     <div class="range">likely range ${money(v.low)} \\u2013 ${money(v.high)} ${esc(v.currency)}</div>
     <dl>${facts}</dl>
     <table>${rows}</table>
+    ${comps ? '<p class="range" style="margin-top:18px">Listings used</p><table>' + comps + '</table>' : ''}
     ${(v.notes || []).map(n => '<p class="range">' + esc(n) + '</p>').join('')}
   </div>`;
 }
@@ -139,7 +151,7 @@ def health() -> dict:
 async def identify(
     images: List[UploadFile] = File(..., description="photos of the tag and the garment"),
     notes: Optional[str] = Form(None),
-    market_check: bool = Form(False),
+    market: bool = Form(True),
     model: str = Form(DEFAULT_MODEL),
     currency: str = Form("USD"),
 ) -> Report:
@@ -162,7 +174,7 @@ async def identify(
             uploads,
             model=model,
             notes=notes,
-            market_check=market_check,
+            market=market,
             currency=currency,
         )
     except ImageError as exc:
