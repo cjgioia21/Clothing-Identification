@@ -85,9 +85,11 @@ class Spot:
 
     def retreat_cost(self) -> int:
         cost = self.card.retreat
-        if self.tool is not None and "Retreat Cost" in (self.tool.ability_text or ""):
-            cost = max(0, cost - 2)
-        return cost
+        if self.tool is not None:
+            for effect in self.tool.effects:
+                if effect.op == "retreat_less":
+                    cost -= effect.n
+        return max(0, cost)
 
 
 @dataclass
@@ -292,6 +294,15 @@ class Battle:
             return
         if self.can_attack(index):
             policy.attack(self, index)
+
+    def can_play_supporter(self, index: int, card: Card) -> bool:
+        """Supporters are banned on the first turn of the player going first."""
+        side = self.sides[index]
+        if side.supporter_used:
+            return False
+        if self.turn == 1 and index == self.first and not card.plays_first_turn:
+            return False
+        return True
 
     def can_attack(self, index: int) -> bool:
         side = self.sides[index]

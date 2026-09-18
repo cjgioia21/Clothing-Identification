@@ -1,0 +1,31 @@
+# Mega Dragonite ex (standard)
+Pokémon: 13
+4 Dratini ASH 150
+3 Mega Dragonite ex ASH 152
+2 Dragonair ASH 151
+1 Bloodmoon Ursaluna ex TWM 141
+1 Budew ASH 16
+1 Fan Rotom ASH 171
+1 Lillie's Clefairy ex ASH 76
+
+Trainer: 35
+4 Carmine TWM 145
+4 Rare Candy MEG 125
+4 Ultra Ball MEG 131
+3 Buddy-Buddy Poffin MEG 167
+3 Lacey SCR 139
+2 Boss's Orders MEG 114
+2 Ciphermaniac's Codebreaking TEF 145
+2 Lucian TWM 157
+2 Night Stretcher MEG 173
+2 Poké Pad ASH 198
+2 Pokégear 3.0 BLK 84
+2 Rescue Board TEF 159
+2 Switch MEG 130
+1 Energy Search Pro SSP 176
+
+Energy: 12
+6 Basic Lightning Energy
+6 Basic Water Energy
+
+Total Cards: 60

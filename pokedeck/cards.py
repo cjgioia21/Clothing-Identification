@@ -50,6 +50,7 @@ class Effect:
     n: int = 0
     filter: str = "any"
     dest: str = "hand"
+    chance: int = 100  # a coin-flip effect only happens half the time
 
     @classmethod
     def from_dict(cls, raw: dict) -> "Effect":
@@ -58,6 +59,7 @@ class Effect:
             n=int(raw.get("n", 0)),
             filter=raw.get("filter", "any"),
             dest=raw.get("dest", "hand"),
+            chance=int(raw.get("chance", 100)),
         )
 
 
@@ -122,6 +124,8 @@ class Card:
     rule_box: str = ""  # "ex", "V", "VSTAR", "VMAX", ...
     card_id: str = ""
     regulation: str = ""
+    ace_spec: bool = False
+    plays_first_turn: bool = False  # a Supporter whose text lifts the first-turn ban
     set_id: str = ""
     energy_provides: tuple[str, ...] = ()
     energy_count: int = 1
@@ -183,6 +187,8 @@ class Card:
             rule_box=raw.get("rule_box", ""),
             card_id=raw.get("card_id", ""),
             regulation=raw.get("regulation", ""),
+            ace_spec=bool(raw.get("ace_spec", False)),
+            plays_first_turn=bool(raw.get("plays_first_turn", False)),
             set_id=raw.get("set_id", ""),
             energy_provides=tuple(raw.get("energy_provides", ())),
             energy_count=int(raw.get("energy_count", 1)),
@@ -209,6 +215,8 @@ class Card:
                 patch[key] = tuple(Attack.from_dict(a) for a in value)
             elif key in ("hp", "retreat", "prize_value", "resistance_value", "energy_count"):
                 patch[key] = int(value)
+            elif key in ("ace_spec", "plays_first_turn"):
+                patch[key] = bool(value)
             elif key in ("types", "energy_provides"):
                 patch[key] = tuple(value)
             elif key in _PATCHABLE_STRINGS:

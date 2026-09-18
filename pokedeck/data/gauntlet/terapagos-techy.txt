@@ -1,33 +1,36 @@
 # Terapagos ex (techy)
-Pokémon: 12
-1 Fezandipiti ex ASH 142
-1 Iron Hands ex PAR 70
-1 Klefki PFO 59
-2 Dusclops SFA 19
-2 Dusknoir SFA 20
-2 Duskull SFA 18
-3 Terapagos ex SCR 128
+Pokémon: 11
+4 Terapagos ex ASH 179
+2 Fezandipiti ex ASH 142
+2 Teal Mask Ogerpon ex TWM 25
+1 Budew ASH 16
+1 Latias ex SSP 76
+1 Munkidori ASH 99
 
 Trainer: 40
-1 Arven SVI 166
-1 Carmine TWM 145
-1 Night Stretcher MEG 173
-1 Rescue Board TEF 159
-2 Artazon PAL 171
-2 Boss's Orders MEG 114
-2 Bravery Charm PAL 173
-2 Counter Catcher PAR 160
-2 Earthen Vessel PAR 163
-2 Super Rod PAL 188
-2 Switch MEG 130
-3 Buddy-Buddy Poffin MEG 167
-3 Iono PAL 185
-4 Nest Ball SVI 181
-4 Professor's Research SVI 189
-4 Rare Candy MEG 125
+4 Carmine TWM 145
 4 Ultra Ball MEG 131
+3 Buddy-Buddy Poffin MEG 167
+3 Lacey SCR 139
+2 Air Balloon MEG 166
+2 Boss's Orders MEG 114
+2 Cheren ASH 258
+2 Ciphermaniac's Codebreaking TEF 145
+2 Friends in Paldea PRE 109
+2 Lucian TWM 157
+2 Night Stretcher MEG 173
+2 Poké Pad ASH 198
+2 Pokégear 3.0 BLK 84
+2 Rescue Board TEF 159
+2 Switch MEG 130
+1 Crispin SCR 133
+1 Energy Search Pro SSP 176
+1 Judge PFO 76
+1 Lana's Aid TWM 155
 
-Energy: 8
-8 Basic Water Energy
+Energy: 9
+3 Basic Grass Energy
+3 Basic Lightning Energy
+3 Basic Water Energy
 
 Total Cards: 60

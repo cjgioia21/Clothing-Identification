@@ -16,7 +16,7 @@ from functools import lru_cache
 from importlib import resources
 
 from .cards import Attack, Card, Category, Stage, Subtype
-from .effects import compile_ability, compile_attack
+from .effects import compile_ability, compile_attack, lifts_first_turn_ban
 
 POOL_FILE = "cardpool.json.gz"
 
@@ -177,6 +177,7 @@ def _energy(record: dict) -> Card:
 def _trainer(record: dict) -> Card:
     text = record.get("effect") or ""
     effects, _, _ = compile_ability({"effect": text})
+    ace = "ACE SPEC" in str(record.get("rarity") or "").upper()
     return Card(
         name=record["name"],
         category=Category.TRAINER,
@@ -184,6 +185,8 @@ def _trainer(record: dict) -> Card:
         effects=tuple(effects),
         ability_text=text,
         known=True,
+        ace_spec=ace,
+        plays_first_turn=lifts_first_turn_ban(text),
         card_id=record.get("id", ""),
         regulation=str(record.get("regulationMark") or ""),
         set_id=str(record.get("set") or ""),

@@ -1,8 +1,12 @@
-"""Generate the gauntlet: 100 opposing decklists built from the card pool.
+"""Generate the gauntlet: 100 Standard-legal decklists built from the card pool.
 
-Each archetype names its main attacker; the evolution line beneath it, a
-standard consistency shell and the Energy count are filled in automatically,
-and four variants are written per archetype.
+Each archetype names its main attacker; the evolution line beneath it, the
+Energy types its attack actually costs, and a consistency shell are filled in
+automatically, and four variants are written per archetype.
+
+Every card is checked against the current Standard regulation marks before it
+goes in, and every finished deck is run through the construction rules, the
+format check and the card resolver.
 
     python tools/build_gauntlet.py            # rewrite pokedeck/data/gauntlet/
 """
@@ -10,50 +14,76 @@ and four variants are written per archetype.
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, field
-from pathlib import Path
-
+import re
 import sys
+from dataclasses import dataclass
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pokedeck.cards import Category, Stage  # noqa: E402
 from pokedeck.decklist import parse, validate  # noqa: E402
 from pokedeck.knowledge import resolve  # noqa: E402
+from pokedeck.legality import check as legality_check  # noqa: E402
+from pokedeck.legality import card_is_legal  # noqa: E402
 from pokedeck.pool import SET_CODES, load_pool  # noqa: E402
 
 OUT = Path(__file__).resolve().parents[1] / "pokedeck" / "data" / "gauntlet"
 CODE_FOR_SET = {v: k for k, v in SET_CODES.items()}
 
+ENERGY_FOR_TYPE = {
+    "Grass": "Basic Grass Energy",
+    "Fire": "Basic Fire Energy",
+    "Water": "Basic Water Energy",
+    "Lightning": "Basic Lightning Energy",
+    "Psychic": "Basic Psychic Energy",
+    "Fighting": "Basic Fighting Energy",
+    "Darkness": "Basic Darkness Energy",
+    "Metal": "Basic Metal Energy",
+}
+
 # name, max copies — added in order until the deck reaches 60 cards.
 SHELL = [
-    ("Professor's Research", 4),
+    ("Carmine", 4),
     ("Ultra Ball", 4),
-    ("Iono", 3),
-    ("Nest Ball", 4),
-    ("Boss's Orders", 2),
+    ("Lacey", 3),
     ("Buddy-Buddy Poffin", 3),
-    ("Arven", 1),
-    ("Super Rod", 2),
+    ("Boss's Orders", 2),
+    ("Lucian", 2),
+    ("Night Stretcher", 2),
     ("Switch", 2),
-    ("Counter Catcher", 2),
-    ("Night Stretcher", 1),
-    ("Artazon", 2),
-    ("Bravery Charm", 2),
-    ("Carmine", 1),
-    ("Earthen Vessel", 2),
-    ("Rescue Board", 2),
-    ("Crispin", 1),
-    ("Professor Turo's Scenario", 1),
-    ("Ciphermaniac's Codebreaking", 2),
     ("Pokégear 3.0", 2),
+    ("Rescue Board", 2),
+    ("Poké Pad", 2),
+    ("Energy Search Pro", 2),
+    ("Ciphermaniac's Codebreaking", 2),
+    ("Cheren", 2),
+    ("Air Balloon", 2),
+    ("Friends in Paldea", 2),
     ("Judge", 1),
-    ("Technical Machine: Evolution", 2),
-    ("Hero's Cape", 2),
+    ("Crispin", 1),
     ("Lana's Aid", 1),
-    ("Town Store", 1),
-    ("Pal Pad", 1),
-    ("Defiance Band", 2),
+    ("Max Rod", 1),
+    ("Precious Trolley", 1),
+    ("Hero's Cape", 1),  # ACE SPEC: exactly one is the legal maximum
+    ("Pokémon Catcher", 2),
+    ("Energy Retrieval", 2),
+    ("Miracle Headset", 1),
+    ("Energy Recycler", 1),
+]
+
+# Tech Pokémon the variants rotate through, so the field is not 100 of one shell.
+TECHS = [
+    "Fezandipiti ex", "Munkidori", "Latias ex", "Fan Rotom", "Budew",
+    "Lillie's Clefairy ex", "Bloodmoon Ursaluna ex", "Klefki", "Jirachi",
+    "Pecharunt ex", "Iron Crown ex", "Teal Mask Ogerpon ex",
+]
+
+VARIANTS = [
+    ("standard", {}),
+    ("aggro", {"attacker": +1, "energy": -1, "techs": 1}),
+    ("techy", {"energy": -2, "techs": 2}),
+    ("grind", {"energy": +1, "techs": 1, "shell": ("Boss's Orders", 1)}),
 ]
 
 
@@ -63,114 +93,61 @@ class Archetype:
     name: str
     attacker: str
     copies: int = 3
-    energy: tuple[tuple[str, int], ...] = ()
     support: tuple[tuple[str, int], ...] = ()
-    line_counts: tuple[int, int] = (4, 1)  # basic, middle stage
-    candy: bool = True
-    notes: str = ""
+    line_counts: tuple[int, int] = (4, 2)  # basics, middle stage
+    energy: int = 11
 
 
 ARCHETYPES = [
-    Archetype("charizard", "Charizard ex", "Charizard ex", 3, (("Basic Fire Energy", 10),),
-              (("Pidgey", 2), ("Pidgeot ex", 2), ("Fezandipiti ex", 1))),
-    Archetype("gardevoir", "Gardevoir ex", "Gardevoir ex", 3, (("Basic Psychic Energy", 12),),
-              (("Munkidori", 1), ("Fezandipiti ex", 1)), (4, 4)),
     Archetype("dragapult", "Dragapult ex", "Dragapult ex", 3,
-              (("Basic Fire Energy", 6), ("Basic Psychic Energy", 5)),
-              (("Duskull", 2), ("Dusclops", 2), ("Dusknoir", 2)), (4, 2)),
+              (("Duskull", 2), ("Dusclops", 2), ("Dusknoir", 2)), (4, 2), 10),
+    Archetype("hydreigon", "Hydreigon ex", "Hydreigon ex", 3, (("Munkidori", 1),), (4, 2), 12),
+    Archetype("slaking", "Slaking ex", "Slaking ex", 3, (("Fezandipiti ex", 1),), (4, 2), 11),
+    Archetype("mega-dragonite", "Mega Dragonite ex", "Mega Dragonite ex", 3, (), (4, 2), 12),
+    Archetype("mega-lucario", "Mega Lucario ex", "Mega Lucario ex", 4, (("Fezandipiti ex", 1),), (4, 0), 11),
+    Archetype("mega-gengar", "Mega Gengar ex", "Mega Gengar ex", 3, (("Munkidori", 1),), (4, 2), 11),
+    Archetype("garchomp", "Cynthia's Garchomp ex", "Cynthia's Garchomp ex", 3, (), (4, 2), 11),
+    Archetype("luxray", "Luxray ex", "Luxray ex", 3, (("Fan Rotom", 1),), (4, 2), 11),
+    Archetype("blaziken", "Blaziken ex", "Blaziken ex", 3, (("Fezandipiti ex", 1),), (4, 2), 11),
+    Archetype("palafin", "Palafin ex", "Palafin ex", 4, (("Fezandipiti ex", 1),), (4, 0), 10),
+    Archetype("ceruledge", "Ceruledge ex", "Ceruledge ex", 3, (("Fezandipiti ex", 1),), (4, 0), 11),
+    Archetype("archaludon", "Archaludon ex", "Archaludon ex", 3, (("Jirachi", 1),), (4, 0), 12),
+    Archetype("flareon", "Flareon ex", "Flareon ex", 3, (("Jolteon ex", 2),), (4, 0), 11),
+    Archetype("jolteon", "Jolteon ex", "Jolteon ex", 3, (("Vaporeon ex", 2),), (4, 0), 11),
+    Archetype("vaporeon", "Vaporeon ex", "Vaporeon ex", 3, (("Leafeon ex", 2),), (4, 0), 11),
+    Archetype("blissey", "Blissey ex", "Blissey ex", 3, (("Fezandipiti ex", 1),), (4, 0), 12),
+    Archetype("milotic", "Milotic ex", "Milotic ex", 3, (("Latias ex", 1),), (4, 0), 11),
+    Archetype("greninja", "Greninja ex", "Greninja ex", 3, (("Fezandipiti ex", 1),), (4, 2), 11),
+    Archetype("tyranitar", "Tyranitar ex", "Tyranitar ex", 3, (("Munkidori", 1),), (4, 2), 11),
+    Archetype("metagross", "Steven's Metagross ex", "Steven's Metagross ex", 3, (), (4, 2), 12),
+    Archetype("grimmsnarl", "Marnie's Grimmsnarl ex", "Marnie's Grimmsnarl ex", 3, (), (4, 2), 11),
+    Archetype("miraidon", "Miraidon ex", "Miraidon ex", 4, (("Fan Rotom", 1),), (0, 0), 12),
     Archetype("raging-bolt", "Raging Bolt ex", "Raging Bolt ex", 4,
-              (("Basic Lightning Energy", 7), ("Basic Fighting Energy", 5)),
-              (("Teal Mask Ogerpon ex", 2), ("Squawkabilly ex", 1)), candy=False),
-    Archetype("miraidon", "Miraidon ex", "Miraidon ex", 4, (("Basic Lightning Energy", 11),),
-              (("Iron Hands ex", 2), ("Fan Rotom", 1)), candy=False),
-    Archetype("gholdengo", "Gholdengo ex", "Gholdengo ex", 3, (("Basic Metal Energy", 12),),
-              (("Fezandipiti ex", 1),), (4, 0), candy=False),
-    Archetype("terapagos", "Terapagos ex", "Terapagos ex", 3, (("Basic Water Energy", 10),),
-              (("Duskull", 2), ("Dusclops", 2), ("Dusknoir", 2), ("Fezandipiti ex", 1)), candy=True),
-    Archetype("iron-thorns", "Iron Thorns ex", "Iron Thorns ex", 4, (("Basic Lightning Energy", 11),),
-              (("Iron Hands ex", 1), ("Latias ex", 1)), candy=False),
-    Archetype("ceruledge", "Ceruledge ex", "Ceruledge ex", 3, (("Basic Fire Energy", 11),),
-              (("Fezandipiti ex", 1),), (4, 0), candy=False),
-    Archetype("roaring-moon", "Roaring Moon ex", "Roaring Moon ex", 4, (("Basic Darkness Energy", 10),),
-              (("Squawkabilly ex", 1), ("Munkidori", 1)), candy=False),
-    Archetype("archaludon", "Archaludon ex", "Archaludon ex", 3, (("Basic Metal Energy", 12),),
-              (("Fezandipiti ex", 1),), (4, 0), candy=False),
-    Archetype("milotic", "Milotic ex", "Milotic ex", 3, (("Basic Water Energy", 11),),
-              (("Fezandipiti ex", 1),), (4, 0), candy=False),
-    Archetype("chien-pao", "Chien-Pao ex", "Chien-Pao ex", 4, (("Basic Water Energy", 12),),
-              (("Frigibax", 3), ("Arctibax", 1), ("Baxcalibur", 3)), candy=True),
-    Archetype("blissey", "Blissey ex", "Blissey ex", 3, (("Basic Psychic Energy", 12),),
-              (("Fezandipiti ex", 1),), (4, 0), candy=False),
-    Archetype("pikachu", "Pikachu ex", "Pikachu ex", 4, (("Basic Lightning Energy", 10),),
-              (("Latias ex", 1), ("Fan Rotom", 1)), candy=False),
-    Archetype("iron-valiant", "Iron Valiant ex", "Iron Valiant ex", 4, (("Basic Psychic Energy", 10),),
-              (("Munkidori", 2), ("Fezandipiti ex", 1)), candy=False),
-    Archetype("hydreigon", "Hydreigon ex", "Hydreigon ex", 3, (("Basic Darkness Energy", 12),),
-              (("Munkidori", 1),), (4, 2)),
-    Archetype("tyranitar", "Tyranitar ex", "Tyranitar ex", 3, (("Basic Darkness Energy", 11),),
-              (("Fezandipiti ex", 1),), (4, 2)),
-    Archetype("greninja", "Greninja ex", "Greninja ex", 3, (("Basic Water Energy", 11),),
-              (("Fezandipiti ex", 1),), (4, 2)),
-    Archetype("alakazam", "Alakazam ex", "Alakazam ex", 3, (("Basic Psychic Energy", 11),),
-              (("Munkidori", 1),), (4, 2)),
-    Archetype("mega-lucario", "Mega Lucario ex", "Mega Lucario ex", 3, (("Basic Fighting Energy", 11),),
-              (("Fezandipiti ex", 1),), (4, 0), candy=False),
-    Archetype("mega-gardevoir", "Mega Gardevoir ex", "Mega Gardevoir ex", 3,
-              (("Basic Psychic Energy", 12),), (("Munkidori", 1),), (4, 3)),
-    Archetype("mega-venusaur", "Mega Venusaur ex", "Mega Venusaur ex", 3, (("Basic Grass Energy", 12),),
-              (("Fezandipiti ex", 1),), (4, 2)),
-    Archetype("flareon", "Flareon ex", "Flareon ex", 3, (("Basic Fire Energy", 11),),
-              (("Jolteon ex", 2), ("Vaporeon ex", 1)), (4, 0), candy=False),
-    Archetype("genesect", "Genesect ex", "Genesect ex", 4, (("Basic Metal Energy", 11),),
-              (("Zacian ex", 2), ("Fezandipiti ex", 1)), candy=False),
-]
-
-# Prints that a real list would name, where the newest reprint is not the one.
-PINNED = {
-    "Charizard ex": "OBF", "Gardevoir ex": "SVI", "Dragapult ex": "TWM",
-    "Pidgeot ex": "OBF", "Chien-Pao ex": "PAL", "Baxcalibur": "PAL",
-    "Miraidon ex": "SVI", "Iron Hands ex": "PAR", "Roaring Moon ex": "PAR",
-    "Raging Bolt ex": "TEF", "Terapagos ex": "SCR", "Gholdengo ex": "PAR",
-    "Iron Thorns ex": "TWM", "Ceruledge ex": "SSP", "Archaludon ex": "SSP",
-}
-
-# Tech Pokémon the variants rotate through, so the field is not 100 of one shell.
-TECHS = [
-    "Fan Rotom", "Latias ex", "Squawkabilly ex", "Munkidori", "Mew ex",
-    "Jirachi", "Klefki", "Budew", "Bloodmoon Ursaluna ex", "Lillie's Clefairy ex",
-    "Fezandipiti ex", "Iron Hands ex",
-]
-
-# Four variants per archetype: the stock list, then three tuned versions.
-VARIANTS = [
-    ("standard", {}),
-    ("aggro", {"attacker": +1, "energy": -1, "techs": 1}),
-    ("techy", {"energy": -2, "techs": 2}),
-    ("grind", {"energy": +1, "techs": 1, "shell": ("Counter Catcher", 2)}),
+              (("Teal Mask Ogerpon ex", 2),), (0, 0), 11),
+    Archetype("terapagos", "Terapagos ex", "Terapagos ex", 4, (("Fezandipiti ex", 1),), (0, 0), 11),
+    Archetype("zacian", "Zacian ex", "Zacian ex", 4, (("Iron Crown ex", 1),), (0, 0), 12),
 ]
 
 
 def find(pool, name: str):
-    """Look a card up, honouring the print a real list would name."""
-    code = PINNED.get(name)
-    if code:
-        for card in pool.prints(name):
-            if CODE_FOR_SET.get(card.set_id) == code:
-                return card
-    return pool.lookup(name)
+    """The newest Standard-legal print of a card, or None."""
+    legal = [card for card in pool.prints(name) if card_is_legal(card)]
+    return legal[0] if legal else None
+
+
+def require(pool, name: str):
+    card = find(pool, name)
+    if card is None:
+        raise SystemExit(f"no Standard-legal print of {name!r}")
+    return card
 
 
 def evolution_line(pool, attacker_name: str, counts: tuple[int, int]) -> list[tuple[str, int]]:
-    """Walk an attacker back down its evolution line, using printed cards."""
-    card = find(pool, attacker_name)
-    if card is None:
-        raise SystemExit(f"unknown attacker {attacker_name!r}")
+    """Walk an attacker back down its evolution line, using legal prints."""
+    card = require(pool, attacker_name)
     chain = [card]
     while chain[0].evolves_from:
-        previous = find(pool, chain[0].evolves_from)
-        if previous is None:
-            break
-        chain.insert(0, previous)
+        chain.insert(0, require(pool, chain[0].evolves_from))
     basics, middles = counts
     line: list[tuple[str, int]] = []
     for depth, member in enumerate(chain[:-1]):
@@ -178,47 +155,104 @@ def evolution_line(pool, attacker_name: str, counts: tuple[int, int]) -> list[tu
     return [entry for entry in line if entry[1] > 0]
 
 
+def main_attack(card):
+    """The attack the simulator's player would actually aim for."""
+    attacks = [a for a in card.attacks if a.cost and len(a.cost) <= 3]
+    if not attacks:
+        attacks = list(card.attacks)
+    if not attacks:
+        raise SystemExit(f"{card.name} has no attack")
+    return max(attacks, key=lambda a: (a.damage, -len(a.cost)))
+
+
+def energy_split(card, total: int) -> list[tuple[str, int]]:
+    """Basic Energy matching what the attacker's own attack costs."""
+    types = [c for c in main_attack(card).cost if c in ENERGY_FOR_TYPE]
+    if not types:
+        types = [t for t in card.types if t in ENERGY_FOR_TYPE] or ["Psychic"]
+    wanted: list[str] = []
+    for kind in types:
+        if kind not in wanted:
+            wanted.append(kind)
+    share, extra = divmod(total, len(wanted))
+    return [
+        (ENERGY_FOR_TYPE[kind], share + (1 if index < extra else 0))
+        for index, kind in enumerate(wanted)
+    ]
+
+
 def build(pool, archetype: Archetype, variant_name: str, tweak: dict, seed: int = 0) -> str:
     counts: dict[str, int] = {}
 
     def add(name: str, n: int) -> None:
-        if n <= 0:
-            return
-        counts[name] = counts.get(name, 0) + n
+        if n > 0:
+            counts[name] = counts.get(name, 0) + n
 
+    attacker = require(pool, archetype.attacker)
     for name, n in evolution_line(pool, archetype.attacker, archetype.line_counts):
         add(name, n)
     add(archetype.attacker, min(4, archetype.copies + tweak.get("attacker", 0)))
     for name, n in archetype.support:
+        require(pool, name)
         add(name, n)
     for offset in range(tweak.get("techs", 0)):
         tech = TECHS[(seed + offset * 5) % len(TECHS)]
-        if tech != archetype.attacker:
+        if tech != archetype.attacker and find(pool, tech):
             add(tech, 1)
 
-    energy_total = 0
-    biggest = max(n for _, n in archetype.energy)
-    for name, n in archetype.energy:
-        amount = max(4, n + tweak.get("energy", 0)) if n == biggest else n
-        add(name, amount)
-        energy_total += amount
+    # A deck that runs out of Pokémon loses on the spot, and only Basics can be
+    # put down from hand, so every list carries a floor of both.
+    def pokemon_count(basics_only: bool = False) -> int:
+        total = 0
+        for name, n in counts.items():
+            if name.startswith("Basic ") and name.endswith("Energy"):
+                continue
+            card = require(pool, name)
+            if card.category is not Category.POKEMON:
+                continue
+            if basics_only and not card.is_basic_pokemon:
+                continue
+            total += n
+        return total
 
-    pokemon = sum(
-        n for name, n in counts.items()
-        if find(pool, name) and find(pool, name).category is Category.POKEMON
-    )
-    remaining = 60 - pokemon - energy_total
+    for offset in range(len(TECHS) * 2):
+        if pokemon_count(basics_only=True) >= 8 and pokemon_count() >= 11:
+            break
+        tech = TECHS[(seed + offset) % len(TECHS)]
+        if tech != archetype.attacker and find(pool, tech) and counts.get(tech, 0) < 2:
+            add(tech, 1)
+
+    energy_total = max(8, archetype.energy + tweak.get("energy", 0))
+    for name, n in energy_split(attacker, energy_total):
+        add(name, n)
+
+    remaining = 60 - pokemon_count() - energy_total
     if remaining < 0:
         raise SystemExit(f"{archetype.key}/{variant_name}: {abs(remaining)} cards over")
 
     shell = list(SHELL)
-    if archetype.candy:
+    needs_candy = any(
+        (find(pool, name) or attacker).stage is Stage.STAGE2
+        for name in counts
+        if not name.startswith("Basic ")
+    )
+    if needs_candy:
         shell.insert(2, ("Rare Candy", 4))
     if "shell" in tweak:
         shell.insert(0, tweak["shell"])
+
+    ace_used = any((find(pool, name) or attacker).ace_spec for name in counts
+                   if not name.startswith("Basic "))
     for name, cap in shell:
         if remaining <= 0:
             break
+        card = find(pool, name)
+        if card is None:
+            continue
+        if card.ace_spec:
+            if ace_used:
+                continue  # a deck may contain only one ACE SPEC card
+            cap, ace_used = 1, True
         take = min(cap, remaining)
         add(name, take)
         remaining -= take
@@ -232,25 +266,32 @@ def render(pool, title: str, counts: dict[str, int]) -> str:
     groups: dict[Category, list[str]] = {c: [] for c in Category}
     totals: dict[Category, int] = {c: 0 for c in Category}
     for name, n in counts.items():
-        card = find(pool, name)
-        category = card.category if card else Category.TRAINER
-        set_code = CODE_FOR_SET.get(card.set_id, "") if card else ""
-        number = card.card_id.split("-")[-1].lstrip("0") if card and card.card_id else ""
-        if card and card.is_basic_energy:
-            set_code, number = "", ""
-        suffix = f" {set_code} {number}" if set_code and number else ""
-        groups[category].append(f"{n} {name}{suffix}")
-        totals[category] += n
+        if name.startswith("Basic ") and name.endswith("Energy"):
+            groups[Category.ENERGY].append(f"{n} {name}")
+            totals[Category.ENERGY] += n
+            continue
+        card = require(pool, name)
+        number = card.card_id.split("-")[-1].lstrip("0")
+        code = CODE_FOR_SET.get(card.set_id, "")
+        suffix = f" {code} {number}" if code and number else ""
+        groups[card.category].append(f"{n} {name}{suffix}")
+        totals[card.category] += n
 
     lines = [f"# {title}"]
-    for category, label in ((Category.POKEMON, "Pokémon"), (Category.TRAINER, "Trainer"), (Category.ENERGY, "Energy")):
+    for category, label in ((Category.POKEMON, "Pokémon"), (Category.TRAINER, "Trainer"),
+                            (Category.ENERGY, "Energy")):
         if not groups[category]:
             continue
         lines.append(f"{label}: {totals[category]}")
-        lines.extend(sorted(groups[category]))
+        lines.extend(sorted(groups[category], key=_sort_key))
         lines.append("")
     lines.append(f"Total Cards: {sum(totals.values())}")
     return "\n".join(lines) + "\n"
+
+
+def _sort_key(line: str) -> tuple[int, str]:
+    count, rest = line.split(" ", 1)
+    return (-int(count), rest)
 
 
 def main() -> int:
@@ -266,17 +307,19 @@ def main() -> int:
     written = 0
     for position, archetype in enumerate(ARCHETYPES):
         for variant_name, tweak in VARIANTS:
+            label = f"{archetype.key}/{variant_name}"
             text = build(pool, archetype, variant_name, tweak, seed=position)
             deck = parse(text, name=f"{archetype.name} ({variant_name})")
-            problems = [i for i in validate(deck) if i.level == "error"]
-            if problems:
-                raise SystemExit(f"{archetype.key}/{variant_name}: {problems[0].message}")
             resolution = resolve(deck)
+            problems = [i for i in validate(deck) if i.level == "error"]
+            problems += [i for i in legality_check(deck, resolution) if i.level == "error"]
+            if problems:
+                raise SystemExit(f"{label}: {problems[0].message}")
             if resolution.unknown:
-                raise SystemExit(f"{archetype.key}/{variant_name}: unknown {resolution.unknown}")
+                raise SystemExit(f"{label}: unknown {resolution.unknown}")
             (out / f"{archetype.key}-{variant_name}.txt").write_text(text, encoding="utf-8")
             written += 1
-    print(f"wrote {written} decklists to {out}")
+    print(f"wrote {written} Standard-legal decklists to {out}")
     return 0
 
 

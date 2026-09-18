@@ -55,7 +55,13 @@ def composition(deck: Deck, resolution: Resolution) -> dict[str, int]:
     return counts
 
 
-def render_check(deck: Deck, resolution: Resolution, issues: list[Issue]) -> str:
+def render_check(
+    deck: Deck,
+    resolution: Resolution,
+    issues: list[Issue],
+    format_issues: list[Issue] | None = None,
+    format_name: str = "standard",
+) -> str:
     counts = composition(deck, resolution)
     lines = [f"{deck.name} — {deck.size} cards", ""]
     lines.append("Composition")
@@ -78,11 +84,20 @@ def render_check(deck: Deck, resolution: Resolution, issues: list[Issue]) -> str
             lines.append(f"  {name:<32}{pct(at_least(4, 7, deck.size))}  {pct(prized(4, deck.size))}")
 
     if issues:
-        lines += ["", "Issues"]
+        lines += ["", "Construction"]
         for issue in issues:
             lines.append(f"  [{issue.level}] {issue.message}")
     else:
-        lines += ["", "Issues: none — deck is legal for construction"]
+        lines += ["", "Construction: 60 cards, no card over its copy limit"]
+
+    if format_issues is not None:
+        errors = [i for i in format_issues if i.level == "error"]
+        warnings = [i for i in format_issues if i.level == "warning"]
+        lines += ["", f"Format ({format_name})"]
+        if not errors and not warnings:
+            lines.append("  legal — every card is in the current regulation marks")
+        for issue in errors + warnings:
+            lines.append(f"  [{issue.level}] {issue.message}")
 
     if resolution.unknown:
         lines += [
@@ -185,6 +200,11 @@ def render_gauntlet(report, rows: int = 0) -> str:
         ),
         f"  card text modelled {pct(report.coverage)}",
     ]
+    if report.illegal_cards:
+        lines.append(
+            "  NOT STANDARD-LEGAL:   " + ", ".join(sorted(report.illegal_cards)[:8])
+            + "  (the field is all legal decks)"
+        )
     if report.unknown_cards:
         lines.append("  not in the card pool: " + ", ".join(sorted(report.unknown_cards)))
     if report.partial_cards:

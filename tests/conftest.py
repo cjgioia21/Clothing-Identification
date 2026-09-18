@@ -1,4 +1,5 @@
 import random
+from pathlib import Path
 
 import pytest
 
@@ -6,44 +7,31 @@ from pokedeck.decklist import parse
 from pokedeck.engine import Config, Game
 from pokedeck.knowledge import resolve
 
-CHARIZARD = """
-Pokémon: 13
-4 Charmander PAF 7
-1 Charmeleon PAF 8
-3 Charizard ex OBF 125
-2 Pidgey MEW 16
-2 Pidgeot ex OBF 164
-1 Radiant Greninja ASR 46
-
-Trainer: 34
-4 Professor's Research SVI 189
-3 Iono PAL 185
-2 Boss's Orders PAL 172
-1 Arven OBF 186
-4 Ultra Ball SVI 196
-4 Rare Candy SVI 191
-4 Nest Ball SVI 181
-3 Buddy-Buddy Poffin TEF 144
-2 Super Rod PAL 188
-2 Counter Catcher PAR 160
-2 Switch SVI 194
-1 Night Stretcher SFA 61
-2 Artazon PAL 171
-
-Energy: 13
-9 Basic Fire Energy SVE 2
-4 Basic Water Energy SVE 3
-"""
+EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
+CHARIZARD = (EXAMPLES / "rotated-charizard.txt").read_text(encoding="utf-8")
+DRAGAPULT = (EXAMPLES / "dragapult.txt").read_text(encoding="utf-8")
+RAGING_BOLT = (EXAMPLES / "raging-bolt.txt").read_text(encoding="utf-8")
 
 
 @pytest.fixture
 def charizard_deck():
+    """A pre-rotation list: fine for parsing and odds, illegal in Standard."""
     return parse(CHARIZARD, name="charizard")
 
 
 @pytest.fixture
 def charizard_kb(charizard_deck):
     return resolve(charizard_deck)
+
+
+@pytest.fixture
+def legal_deck():
+    return parse(DRAGAPULT, name="dragapult")
+
+
+@pytest.fixture
+def legal_kb(legal_deck):
+    return resolve(legal_deck)
 
 
 def make_game(deck_text, config=None, seed=0, name="test"):

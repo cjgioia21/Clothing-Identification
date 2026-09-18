@@ -9,11 +9,10 @@ from pokedeck.knowledge import resolve
 from pokedeck.policy import Policy
 from pokedeck.pool import load_pool
 
-CHARIZARD = open("examples/charizard.txt", encoding="utf-8").read()
-GARDEVOIR = open("examples/gardevoir.txt", encoding="utf-8").read()
+from .conftest import DRAGAPULT, RAGING_BOLT
 
 
-def make_battle(seed=0, first=0, a=CHARIZARD, b=GARDEVOIR, **kwargs):
+def make_battle(seed=0, first=0, a=DRAGAPULT, b=RAGING_BOLT, **kwargs):
     decks = []
     for text, name in ((a, "A"), (b, "B")):
         deck = parse(text, name=name)
@@ -191,6 +190,8 @@ def test_scaling_attacks_discard_exactly_what_they_need(battle):
 def test_spread_damage_takes_knockouts_first(battle):
     battle.setup()
     side = battle.sides[1]
+    if not side.bench:
+        side.bench_pokemon(load_pool().lookup("Dreepy", "ASH", "158") or side.active.card, 1)
     weak = side.bench[0]
     weak.damage = weak.max_hp - 20
     battle.spread_damage(1, 60)

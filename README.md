@@ -9,9 +9,13 @@ Violet and Mega Evolution set, ~5,000 cards) and ships inside the package, so
 nothing calls the network at runtime. No dependencies beyond the standard
 library.
 
+Every deck in the gauntlet is **Standard-legal**: current regulation marks only
+(H, I and J after the April 2026 rotation), inside the copy limits, one ACE SPEC
+at most. `pokedeck check` holds your list to the same bar.
+
 ```bash
 pip install -e .
-pokedeck gauntlet examples/charizard.txt
+pokedeck gauntlet examples/dragapult.txt
 ```
 
 ## The gauntlet
@@ -20,33 +24,40 @@ pokedeck gauntlet examples/charizard.txt
 matchup is scored from both sides of the coin flip.
 
 ```
-$ pokedeck gauntlet examples/charizard.txt -n 10 --rows 5
-examples/charizard.txt vs the gauntlet — 100 decks × 10 games (1000 games)
+$ pokedeck gauntlet examples/dragapult.txt -n 10 --rows 5
+examples/dragapult.txt vs the gauntlet — 100 decks × 10 games (1000 games)
 
-  record            721-279-0   (72.1% ±2.8%)
+  record            680-318-2   (68.0% ±2.9%)
   going first        70.0%   (500 games)
-  going second       74.2%   (500 games)
-  prize margin      +2.52 per game   (4.68 taken, 2.17 given)
-  game length       9.7 turns each
-  decided by        prizes 73%, deck-out 16%, bench-out 11%
-  card text modelled 100.0%
+  going second       66.0%   (500 games)
+  prize margin      +2.03 per game   (4.20 taken, 2.17 given)
+  game length       10.8 turns each
+  decided by        prizes 77%, bench-out 14%, deck-out 9%, turn-limit 0%
+  card text modelled  96.0%
+  partly modelled:      Lucian
 
 Worst 5 matchups
-  win%   matchup                       record    prizes  turns
-   20.0%  Greninja ex (aggro)           2-8-0   -3.1    7.0
-   20.0%  Archaludon ex (grind)         2-8-0   -2.4    8.3
+  win%   matchup                            record    prizes  turns
+   10.0%  Greninja ex (aggro)                1-9-0   -3.2   10.0
+   20.0%  Mega Lucario ex (standard)         2-8-0   -2.5   10.3
    ...
 ```
+
+If your own list is not Standard-legal the report says so and plays it anyway —
+the field stays legal, so you are told what you are measuring.
 
 A thousand games take about seven seconds. Flags: `-n` games per opponent,
 `--decks N` to cut the field down, `--rows N` for only the worst and best N
 matchups (the default prints all 100), `--seed`, `--turn-limit`, `--json`.
 
 The field lives in `pokedeck/data/gauntlet/` as 100 readable decklists — 25
-archetypes (Charizard ex, Gardevoir ex, Dragapult ex, Raging Bolt ex, Miraidon
-ex, Gholdengo ex, Terapagos ex, Mega Lucario ex, …) in four variants each:
-`standard`, `aggro`, `techy` and `grind`. Rebuild or edit the field with
-`python tools/build_gauntlet.py`.
+archetypes (Dragapult ex, Hydreigon ex, Mega Lucario ex, Mega Dragonite ex,
+Cynthia's Garchomp ex, Raging Bolt ex, Miraidon ex, Terapagos ex, Steven's
+Metagross ex, …) in four variants each: `standard`, `aggro`, `techy` and
+`grind`. The builder picks the newest legal print of every card, derives the
+Energy from what the attacker's own attack costs, keeps each list to one ACE
+SPEC, and refuses to write a deck that fails the construction or format check.
+Rebuild or edit the field with `python tools/build_gauntlet.py`.
 
 ## What the battle engine models
 
@@ -57,7 +68,8 @@ Every game is played out properly, by the same heuristic player on both sides:
 - **Turns** — draw, Abilities, Trainers (one Supporter, one Stadium, any number
   of Items), evolution on the real timing rule, one Energy attachment, one
   retreat paid in Energy, then an attack. The player going first cannot attack
-  on turn one.
+  on turn one, and cannot play a Supporter on it either — unless the card says
+  it may, the way Carmine does.
 - **Attacks** — printed cost checked by Energy type, printed damage, the riders
   the text compiler understands (damage per prize taken, per Energy attached,
   "discard as much Energy as you like", bench damage and damage counters,
@@ -96,39 +108,62 @@ overrides file (see *Teaching it new cards*) or refreshing the pool.
 ### `check` — is the deck legal, and what shape is it?
 
 ```
-$ pokedeck check examples/charizard.txt
+$ pokedeck check examples/dragapult.txt
 Composition
-  pokemon              13
-  basics                7
-  draw supporters       8
-  ball/search items    11
+  pokemon              16
+  basics                8
+  draw supporters      10
+  ball/search items     9
   ...
 Opening-hand maths (no draw support)
-  mulligan rate (no Basic in 7)       39.9%
-  draw supporter in opening 7         65.4%
+  mulligan rate (no Basic in 7)       34.6%
+  draw supporter in opening 7         74.1%
+
+Construction: 60 cards, no card over its copy limit
+
+Format (standard)
+  legal — every card is in the current regulation marks
 ```
 
-Exits non-zero when the deck breaks a construction rule (60 cards, four copies
-per card, at least one Pokémon; basic Energy is exempt from the copy limit).
+Two separate bars, both of which exit non-zero when broken:
+
+- **Construction** — 60 cards, four copies per card (basic Energy exempt), at
+  least one Pokémon.
+- **Format** — every card in a legal regulation mark, and at most one ACE SPEC
+  card. Standard is H, I and J: the April 2026 rotation dropped G, and basic
+  Energy has no mark and never rotates. `--format any` checks construction only
+  and skips rotation, for testing an older list (`examples/rotated-charizard.txt`
+  is one, kept to show the failure).
+
+```
+$ pokedeck check examples/rotated-charizard.txt
+Format (standard)
+  [error] Charizard ex (sv03-125) is regulation mark G — not legal in standard
+  [error] Professor's Research (sv01-189) is regulation mark G — not legal in standard
+  ...
+```
+
+A card the pool has never seen is reported as a warning, not an error — we
+cannot verify what we cannot look up.
 
 ### `sim` — how often does the deck set up?
 
 A fast goldfish simulation of the opening turns, with no opponent:
 
 ```
-$ pokedeck sim examples/charizard.txt -n 5000 --turns 3 \
-    --goal "play:Charizard ex" --goal "Rare Candy + Charmander"
+$ pokedeck sim examples/dragapult.txt -n 5000 --turns 3 \
+    --goal "play:Dragapult ex" --goal "Rare Candy + Dreepy"
 ```
 
-- `--goal "Charizard ex"` — the card is in hand or in play.
-- `--goal "play:Charizard ex"` — the card is on the board.
-- `--goal "Rare Candy + Charmander"` — every piece at once, scored the moment
-  they line up.
+- `--goal "Dragapult ex"` — the card is in hand or in play.
+- `--goal "play:Dragapult ex"` — the card is on the board.
+- `--goal "Rare Candy + Dreepy"` — every piece at once, scored the moment they
+  line up.
 
 ### `odds` — exact hypergeometric numbers, no simulation
 
 ```
-$ pokedeck odds examples/charizard.txt --card "Rare Candy" --turns 2
+$ pokedeck odds examples/dragapult.txt --card "Rare Candy" --turns 2
   card                            copies      T0      T1      T2   prized
   Rare Candy                         4     39.9%   44.5%   48.8%    35.1%
 ```
@@ -145,16 +180,16 @@ the exact print (and therefore the exact card), which matters when a Pokémon ha
 been printed more than once:
 
 ```
-Pokémon: 13
-4 Charmander PAF 7
-3 Charizard ex OBF 125
+Pokémon: 16
+4 Dreepy ASH 158
+3 Dragapult ex ASH 160
 
 Trainer: 34
-4 Professor's Research SVI 189
+4 Carmine TWM 145
 ...
 
-Energy: 13
-9 Basic Fire Energy SVE 2
+Energy: 10
+5 Basic Fire Energy
 ```
 
 ## Teaching it new cards
@@ -200,9 +235,12 @@ This rewrites `pokedeck/data/cardpool.json.gz` (about 270 KiB for ~5,000 cards).
 
 ```python
 from pokedeck import parse_file, resolve, run_gauntlet, load_field
+from pokedeck.legality import check as legality_check
 
 deck = parse_file("deck.txt")
-report = run_gauntlet(deck, resolve(deck), load_field(), games_per_deck=10)
+resolution = resolve(deck)
+print(legality_check(deck, resolution))          # [] when the list is Standard-legal
+report = run_gauntlet(deck, resolution, load_field(), games_per_deck=10)
 print(report.win_rate, report.sorted_matchups()[0].opponent)
 ```
 

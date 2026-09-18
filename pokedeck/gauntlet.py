@@ -11,6 +11,7 @@ from statistics import fmean
 from .battle import DEFAULT_TURN_LIMIT, Battle, BattleDeck
 from .decklist import Deck, parse
 from .knowledge import Resolution, resolve
+from .legality import card_is_legal
 from .policy import Policy
 
 FIELD_PACKAGE = "pokedeck.data.gauntlet"
@@ -63,6 +64,7 @@ class GauntletReport:
     coverage: float = 1.0
     unknown_cards: list[str] = field(default_factory=list)
     partial_cards: list[str] = field(default_factory=list)
+    illegal_cards: list[str] = field(default_factory=list)
 
     @property
     def win_rate(self) -> float:
@@ -133,6 +135,12 @@ def run_gauntlet(
         coverage=resolution.coverage(),
         unknown_cards=list(resolution.unknown),
         partial_cards=list(resolution.partial),
+        illegal_cards=[
+            entry.name for entry in deck.entries
+            if not card_is_legal(resolution.get(entry.name))
+            and resolution.get(entry.name).known
+            and resolution.get(entry.name).regulation
+        ],
     )
 
     for position, (opponent_deck, opponent_resolution) in enumerate(field_decks):

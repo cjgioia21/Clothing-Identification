@@ -1,31 +1,32 @@
 # Dragapult ex (techy)
 Pokémon: 17
-1 Budew ASH 16
-1 Squawkabilly ex PAL 169
+4 Dreepy ASH 158
+3 Dragapult ex ASH 160
 2 Drakloak ASH 159
 2 Dusclops SFA 19
 2 Dusknoir SFA 20
 2 Duskull SFA 18
-3 Dragapult ex TWM 130
-4 Dreepy ASH 158
+1 Fezandipiti ex ASH 142
+1 Lillie's Clefairy ex ASH 76
 
-Trainer: 34
-1 Arven SVI 166
-1 Night Stretcher MEG 173
-2 Artazon PAL 171
-2 Boss's Orders MEG 114
-2 Counter Catcher PAR 160
-2 Super Rod PAL 188
-2 Switch MEG 130
-3 Buddy-Buddy Poffin MEG 167
-3 Iono PAL 185
-4 Nest Ball SVI 181
-4 Professor's Research SVI 189
+Trainer: 35
+4 Carmine TWM 145
 4 Rare Candy MEG 125
 4 Ultra Ball MEG 131
+3 Buddy-Buddy Poffin MEG 167
+3 Lacey SCR 139
+2 Boss's Orders MEG 114
+2 Ciphermaniac's Codebreaking TEF 145
+2 Lucian TWM 157
+2 Night Stretcher MEG 173
+2 Poké Pad ASH 198
+2 Pokégear 3.0 BLK 84
+2 Rescue Board TEF 159
+2 Switch MEG 130
+1 Energy Search Pro SSP 176
 
-Energy: 9
+Energy: 8
 4 Basic Fire Energy
-5 Basic Psychic Energy
+4 Basic Psychic Energy
 
 Total Cards: 60

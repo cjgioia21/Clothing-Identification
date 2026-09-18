@@ -16,6 +16,17 @@ STATUSES = ("asleep", "paralyzed", "confused", "burned", "poisoned")
 # Sentences that change nothing the simulator tracks.
 _IGNORABLE = (
     r"move an energy from this pok.mon",
+    r"pok.mon ex, pok.mon v, etc",
+    r"have rule boxes",
+    r"if you go first, you may use this card during your first turn",
+    r"shuffle the other cards back into your deck",
+    r"choose 1 of your basic pok.mon in play",
+    r"if you have a stage 2 card in your hand that evolves from that pok.mon",
+    r"you can't use this card during your first turn or on a basic pok.mon",
+    r"you still need the energy to use",
+    r"reveal (it|them),? and put",
+    r"^flip a coin\.?$",
+    r"draw \d+ cards instead",
     r"you may discard a stadium in play",
     r"can't retreat",
     r"this attack can be used even if this pok.mon is on the bench",
@@ -165,8 +176,13 @@ def _research(m):
 
 
 @_pattern(r"shuffles? (?:their|your) hand and puts? it on the bottom of (?:their|your) deck", priority=10)
-def _iono(m):
-    return [Effect(op="shuffle_hand_into_deck"), Effect(op="draw_prizes")]
+def _shuffle_to_bottom(m):
+    return [Effect(op="shuffle_hand_into_deck")]
+
+
+@_pattern(r"draws? a card for each of (?:their|your) remaining prize cards", priority=20)
+def _draw_per_prize(m):
+    return [Effect(op="draw_prizes")]
 
 
 @_pattern(r"shuffle your hand into your deck\. then,? draw (\d+) cards?", priority=10)
@@ -310,6 +326,75 @@ def _spread_energy(m):
     return [Effect(op="attach_energy", n=3, filter="basic_energy", dest="deck")]
 
 
+@_pattern(r"draw (\d+) cards instead", priority=30)
+def _conditional_instead(m):
+    return []  # the base draw already happened; the upside is situational
+
+
+@_pattern(r"^shuffle your hand into your deck", priority=8)
+def _shuffle_hand(m):
+    return [Effect(op="shuffle_hand_into_deck")]
+
+
+@_pattern(r"each player shuffles their hand into their deck and draws (\d+) cards", priority=20)
+def _judge_all(m):
+    return [Effect(op="shuffle_hand_into_deck"), Effect(op="draw", n=int(m.group(1)))]
+
+
+@_pattern(r"if heads,? (?:that player |you )?draws? (\d+) cards", priority=20)
+def _coin_draw(m):
+    return [Effect(op="draw", n=int(m.group(1)), chance=50)]
+
+
+@_pattern(r"look at the top (\d+) cards of your deck", priority=20)
+def _dig(m):
+    return [Effect(op="dig", n=int(m.group(1)), filter="any")]
+
+
+@_pattern(r"you may reveal an? (supporter|item|pok.mon|basic energy|energy|stadium) card you find there", priority=20)
+def _dig_take(m):
+    targets = {"supporter": "supporter", "item": "item", "pokémon": "pokemon",
+               "pokemon": "pokemon", "basic energy": "basic_energy", "energy": "energy",
+               "stadium": "stadium"}
+    return [Effect(op="dig_take", filter=targets.get(m.group(1).lower(), "any"))]
+
+
+@_pattern(r"put up to (\d+) in any combination of .* from your discard pile into your hand", priority=20)
+def _recover_to_hand(m):
+    return [Effect(op="recover", n=int(m.group(1)), dest="hand")]
+
+
+@_pattern(r"put up to (\d+) basic energy cards from your discard pile into your hand", priority=20)
+def _energy_retrieval(m):
+    return [Effect(op="recover", n=int(m.group(1)), filter="basic_energy", dest="hand")]
+
+
+@_pattern(r"shuffle up to (\d+) (basic energy cards|pok.mon) from your discard pile into your deck", priority=20)
+def _recycle(m):
+    target = "basic_energy" if "energy" in m.group(2).lower() else "pokemon"
+    return [Effect(op="recover", n=int(m.group(1)), filter=target)]
+
+
+@_pattern(r"search your deck for any number of basic energy cards", priority=20)
+def _energy_pro(m):
+    return [Effect(op="search", n=2, filter="basic_energy")]
+
+
+@_pattern(r"search your deck for any number of basic pok.mon and put them onto your bench", priority=25)
+def _trolley(m):
+    return [Effect(op="search", n=2, filter="basic_pokemon", dest="bench")]
+
+
+@_pattern(r"the retreat cost of the pok.mon this card is attached to is (\{c\}(?:\{c\})?) less", priority=20)
+def _retreat_less(m):
+    return [Effect(op="retreat_less", n=m.group(1).lower().count("{c}"))]
+
+
+@_pattern(r"put (?:up to )?(\d+) (?:supporter|item) cards? from your discard pile into your hand", priority=20)
+def _headset(m):
+    return [Effect(op="recover", n=int(m.group(1)), filter="supporter", dest="hand")]
+
+
 _WORDS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
           "six": 6, "seven": 7, "all": 99}
 
@@ -333,7 +418,7 @@ def compile_text(text: str) -> tuple[list[Effect], list[str]]:
         for _, regex, build in _PATTERNS:
             found = regex.search(sentence)
             if found:
-                effects.extend(build(found))
+                effects.extend(_maybe_coin(sentence, build(found)))
                 matched = True
                 break
         if matched:
@@ -341,7 +426,31 @@ def compile_text(text: str) -> tuple[list[Effect], list[str]]:
         if any(re.search(pattern, sentence, re.IGNORECASE) for pattern in _IGNORABLE):
             continue
         unmodelled.append(sentence)
-    return effects, unmodelled
+    return _merge_dig(effects), unmodelled
+
+
+def _maybe_coin(sentence: str, effects: list[Effect]) -> list[Effect]:
+    """A sentence hanging off a coin flip only happens half the time."""
+    lowered = sentence.lower()
+    if not re.match(r"(flip a coin\.\s*)?if (heads|tails)", lowered):
+        return effects
+    return [
+        Effect(op=e.op, n=e.n, filter=e.filter, dest=e.dest, chance=min(e.chance, 50))
+        for e in effects
+    ]
+
+
+def _merge_dig(effects: list[Effect]) -> list[Effect]:
+    """"Look at the top 7 cards" plus "reveal a Supporter" is one dig."""
+    dig = next((e for e in effects if e.op == "dig"), None)
+    take = next((e for e in effects if e.op == "dig_take"), None)
+    if dig is None:
+        return [e for e in effects if e.op != "dig_take"]
+    depth = dig.n
+    target = take.filter if take is not None else dig.filter
+    merged = [e for e in effects if e.op not in ("dig", "dig_take")]
+    merged.append(Effect(op="dig", n=depth, filter=target))
+    return merged
 
 
 def parse_damage(raw: str | None) -> tuple[int, str]:
@@ -369,6 +478,12 @@ def compile_attack(raw: dict) -> Attack:
         effects=tuple(effects),
         scripted=not unmodelled,
     )
+
+
+def lifts_first_turn_ban(text: str) -> bool:
+    """Carmine and friends may be played on the first turn going first."""
+    return bool(re.search(r"if you go first, you may use this card during your first turn",
+                          text or "", re.IGNORECASE))
 
 
 def compile_ability(raw: dict) -> tuple[tuple[Effect, ...], str, bool]:

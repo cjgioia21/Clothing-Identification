@@ -24,6 +24,8 @@ def matches(card: Card, filter_: str) -> bool:
 def run(battle, index: int, effects, spot=None) -> None:
     """Apply an effect script for the player at ``index``."""
     for effect in effects:
+        if effect.chance < 100 and battle.rng.randrange(100) >= effect.chance:
+            continue  # the coin came down the other way
         _apply(battle, index, effect, spot)
 
 
@@ -49,7 +51,11 @@ def useful(battle, index: int, effects, spot=None) -> bool:
             if battle.policies[index].wants_search(battle, index, effect):
                 return True
             continue
-        if op == "recover" and side.discard:
+        if op == "recover" and any(
+            matches(c, effect.filter) if effect.filter != "any" else True for c in side.discard
+        ):
+            return True
+        if op == "dig" and any(matches(c, effect.filter) for c in side.deck[:effect.n]):
             return True
         if op == "attach_energy" and _energy_source(battle, index, effect):
             return True
@@ -85,7 +91,9 @@ def _apply(battle, index: int, effect: Effect, spot) -> None:
     elif op == "search":
         _search(battle, index, effect)
     elif op == "recover":
-        _recover(battle, index, effect.n)
+        _recover(battle, index, effect)
+    elif op == "dig":
+        _dig(battle, index, effect)
     elif op == "attach_energy":
         _accelerate(battle, index, effect, spot)
     elif op == "switch_self" and side.bench:
@@ -125,16 +133,37 @@ def _search_target(battle, index: int, effect: Effect) -> Card | None:
     return max(options, key=lambda c: policy.card_value(battle, index, c))
 
 
-def _recover(battle, index: int, n: int) -> None:
+def _recover(battle, index: int, effect: Effect) -> None:
+    """Pull cards back out of the discard pile, into the deck or the hand."""
     side = battle.sides[index]
     policy = battle.policies[index]
-    pool = [c for c in side.discard if c.category in (Category.POKEMON, Category.ENERGY)]
-    for _ in range(min(n, len(pool))):
+    if effect.filter and effect.filter != "any":
+        pool = [c for c in side.discard if matches(c, effect.filter)]
+    else:
+        pool = [c for c in side.discard if c.category in (Category.POKEMON, Category.ENERGY)]
+    for _ in range(min(effect.n, len(pool))):
         card = max(pool, key=lambda c: policy.card_value(battle, index, c))
         pool.remove(card)
         side.discard.remove(card)
-        side.deck.append(card)
-    side.shuffle(battle.rng)
+        if effect.dest == "hand":
+            side.hand.append(card)
+        else:
+            side.deck.append(card)
+    if effect.dest != "hand":
+        side.shuffle(battle.rng)
+
+
+def _dig(battle, index: int, effect: Effect) -> None:
+    """Look at the top few cards and take the one the deck wants."""
+    side = battle.sides[index]
+    top = side.deck[:effect.n]
+    options = [c for c in top if matches(c, effect.filter)]
+    if not options:
+        return
+    policy = battle.policies[index]
+    card = max(options, key=lambda c: policy.card_value(battle, index, c))
+    side.deck.remove(card)
+    side.hand.append(card)
 
 
 def _energy_source(battle, index: int, effect: Effect) -> list[Card]:

@@ -1,0 +1,31 @@
+# Blaziken ex (standard)
+Pokémon: 13
+4 Torchic MEP 56
+3 Blaziken ex JTG 24
+2 Combusken DRI 41
+1 Fezandipiti ex ASH 142
+1 Iron Crown ex TEF 81
+1 Jirachi SCR 98
+1 Pecharunt ex SFA 39
+
+Trainer: 36
+4 Carmine TWM 145
+4 Rare Candy MEG 125
+4 Ultra Ball MEG 131
+3 Buddy-Buddy Poffin MEG 167
+3 Lacey SCR 139
+2 Boss's Orders MEG 114
+2 Ciphermaniac's Codebreaking TEF 145
+2 Lucian TWM 157
+2 Night Stretcher MEG 173
+2 Poké Pad ASH 198
+2 Pokégear 3.0 BLK 84
+2 Rescue Board TEF 159
+2 Switch MEG 130
+1 Cheren ASH 258
+1 Energy Search Pro SSP 176
+
+Energy: 11
+11 Basic Fire Energy
+
+Total Cards: 60

@@ -133,9 +133,10 @@ class Policy:
 
     def holding_supporter(self, battle, index: int) -> bool:
         side = battle.sides[index]
-        if side.supporter_used:
-            return False
-        return any(c.is_supporter and c.draw_value for c in side.hand)
+        return any(
+            c.is_supporter and c.draw_value and battle.can_play_supporter(index, c)
+            for c in side.hand
+        )
 
     def play_supporter(self, battle, index: int) -> bool:
         side = battle.sides[index]
@@ -145,6 +146,8 @@ class Policy:
             (c for c in side.hand if c.is_supporter),
             key=lambda c: -self.supporter_value(battle, index, c),
         ):
+            if not battle.can_play_supporter(index, card):
+                continue
             if self.supporter_value(battle, index, card) <= 0:
                 continue
             side.hand.remove(card)
@@ -376,7 +379,7 @@ class Policy:
         side = battle.sides[index]
         for effect in attack.effects:
             if effect.op in ("draw", "draw_to", "discard_hand"):
-                return len(side.hand) <= 2 and len(side.deck) > 10
+                return len(side.hand) <= 2 and len(side.deck) > 20
             if effect.op in ("status", "search", "attach_energy", "ko_target",
                              "bench_damage", "bench_counters", "snipe", "snipe_multi"):
                 return True
@@ -414,8 +417,8 @@ class Policy:
             if effect.op == "discard_hand":
                 bonus -= 20 * min(3, len(side.hand))
             elif effect.op in ("draw", "draw_to"):
-                if len(side.deck) <= 10:
-                    bonus -= 40
+                if len(side.deck) <= 20:
+                    bonus -= 40  # attacking for cards is how a deck runs itself out
                 elif len(side.hand) <= 1:
                     bonus += 20
             elif effect.op in ("bench_damage", "bench_counters", "snipe", "snipe_multi"):
@@ -469,6 +472,8 @@ class Policy:
         side = battle.sides[index]
         in_play = {s.name for s in side.in_play()}
         if card.category is Category.POKEMON:
+            if card.is_basic_pokemon and len(side.in_play()) <= 2:
+                return 10  # running out of Pokémon loses the game on the spot
             if card.evolves_from in in_play:
                 return 10
             if card.stage is Stage.STAGE2 and self.candy_ready(battle, index, card):

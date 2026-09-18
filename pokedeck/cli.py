@@ -12,6 +12,8 @@ from .cards import Category, Deck, Stage
 from .decklist import DecklistError, parse_file, validate
 from .engine import IN_PLAY_PREFIX, Config, play_game
 from .knowledge import Resolution, load_overrides, resolve
+from .legality import FORMATS
+from .legality import check as legality_check
 from .gauntlet import load_field, run_gauntlet
 from .report import (
     render_check,
@@ -40,6 +42,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
     check = subs.add_parser("check", help="validate a decklist and show its shape")
     _add_common(check)
+    check.add_argument("--format", default="standard", choices=sorted(FORMATS),
+                       help="format to check legality against (default: standard)")
     check.set_defaults(handler=_cmd_check)
 
     sim = subs.add_parser("sim", help="simulate opening turns and report setup odds")
@@ -110,19 +114,22 @@ def _load(path: str, overrides_path: str | None) -> tuple[Deck, Resolution]:
 def _cmd_check(args) -> int:
     deck, resolution = _load(args.decklist, args.cards)
     issues = validate(deck)
+    format_issues = legality_check(deck, resolution, args.format)
     if args.json:
         print(json.dumps(
             {
                 "deck": deck.name,
                 "size": deck.size,
+                "format": args.format,
                 "issues": [vars(i) for i in issues],
+                "format_issues": [vars(i) for i in format_issues],
                 "unknown_cards": resolution.unknown,
             },
             indent=2,
         ))
     else:
-        print(render_check(deck, resolution, issues))
-    return 1 if any(i.level == "error" for i in issues) else 0
+        print(render_check(deck, resolution, issues, format_issues, args.format))
+    return 1 if any(i.level == "error" for i in issues + format_issues) else 0
 
 
 def _cmd_sim(args) -> int:
@@ -202,6 +209,7 @@ def _gauntlet_json(report) -> dict:
         "average_turns": report.average_turns,
         "decided_by": dict(report.reasons),
         "coverage": report.coverage,
+        "illegal_cards": report.illegal_cards,
         "unknown_cards": report.unknown_cards,
         "partial_cards": report.partial_cards,
         "matchups": [

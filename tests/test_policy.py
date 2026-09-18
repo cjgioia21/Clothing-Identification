@@ -7,7 +7,8 @@ from pokedeck.knowledge import resolve
 from pokedeck.policy import Policy
 from pokedeck.pool import load_pool
 
-from .test_battle import CHARIZARD, GARDEVOIR, make_battle
+from .conftest import DRAGAPULT
+from .test_battle import make_battle
 
 
 def test_energy_stacks_on_one_attacker_instead_of_spreading():
@@ -109,15 +110,15 @@ def test_promotion_prefers_a_pokemon_that_can_attack():
 
 
 def test_rare_candy_is_valued_when_a_stage_two_can_use_it():
-    deck = parse(CHARIZARD, name="A")
+    deck = parse(DRAGAPULT, name="A")
     resolution = resolve(deck)
     battle = make_battle(seed=5)
     battle.setup()
     battle.turn = 2
     side = battle.sides[0]
     pool = load_pool()
-    side.active = Spot(stack=[pool.lookup("Charmander", "PAF", "7")], turn_played=1)
-    side.hand = [resolution.get("Charizard ex"), resolution.get("Rare Candy")]
+    side.active = Spot(stack=[resolution.get("Dreepy")], turn_played=1)
+    side.hand = [resolution.get("Dragapult ex"), resolution.get("Rare Candy")]
     policy = battle.policies[0]
     assert policy.card_value(battle, 0, resolution.get("Rare Candy")) == 9
 
