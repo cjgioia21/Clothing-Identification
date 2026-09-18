@@ -22,10 +22,10 @@ def test_pct_formats_a_probability():
 
 
 def test_render_check_lists_unknown_cards():
-    deck = parse("Pokémon: 60\n60 Spoink XYZ 1")
+    deck = parse("Pokémon: 60\n60 Glitchmon XYZ 1")
     resolution = resolve(deck)
     out = render_check(deck, resolution, validate(deck))
-    assert "Spoink" in out
+    assert "Glitchmon" in out
     assert "does not know" in out
 
 

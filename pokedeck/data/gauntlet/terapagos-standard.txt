@@ -1,0 +1,31 @@
+# Terapagos ex (standard)
+Pokémon: 10
+1 Fezandipiti ex ASH 142
+2 Dusclops SFA 19
+2 Dusknoir SFA 20
+2 Duskull SFA 18
+3 Terapagos ex SCR 128
+
+Trainer: 40
+1 Arven SVI 166
+1 Carmine TWM 145
+1 Night Stretcher MEG 173
+1 Rescue Board TEF 159
+2 Artazon PAL 171
+2 Boss's Orders MEG 114
+2 Bravery Charm PAL 173
+2 Counter Catcher PAR 160
+2 Earthen Vessel PAR 163
+2 Super Rod PAL 188
+2 Switch MEG 130
+3 Buddy-Buddy Poffin MEG 167
+3 Iono PAL 185
+4 Nest Ball SVI 181
+4 Professor's Research SVI 189
+4 Rare Candy MEG 125
+4 Ultra Ball MEG 131
+
+Energy: 10
+10 Basic Water Energy
+
+Total Cards: 60

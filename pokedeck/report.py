@@ -165,6 +165,56 @@ def render_odds_table(deck: Deck, names: list[str], turns: int) -> str:
     return "\n".join(lines)
 
 
+def render_gauntlet(report, rows: int = 0) -> str:
+    """The gauntlet result: record, splits, and the matchup table."""
+    lines = [
+        f"{report.deck_name} vs the gauntlet — {report.opponents} decks × "
+        f"{report.games_per_deck} games ({report.games} games)",
+        "",
+        f"  record            {report.wins}-{report.losses}-{report.ties}"
+        f"   ({pct(report.win_rate).strip()} ±{report.margin() * 100:.1f}%)",
+        f"  going first       {pct(report.win_rate_first)}   ({report.first_games} games)",
+        f"  going second      {pct(report.win_rate_second)}   ({report.second_games} games)",
+        f"  prize margin      {report.prize_margin:+.2f} per game"
+        f"   ({report.prizes_for / max(1, report.games):.2f} taken,"
+        f" {report.prizes_against / max(1, report.games):.2f} given)",
+        f"  game length       {report.average_turns / 2:.1f} turns each",
+        "  decided by        " + ", ".join(
+            f"{reason} {count / max(1, report.games) * 100:.0f}%"
+            for reason, count in report.reasons.most_common()
+        ),
+        f"  card text modelled {pct(report.coverage)}",
+    ]
+    if report.unknown_cards:
+        lines.append("  not in the card pool: " + ", ".join(sorted(report.unknown_cards)))
+    if report.partial_cards:
+        lines.append("  partly modelled:      " + ", ".join(sorted(report.partial_cards)[:8]))
+
+    ordered = report.sorted_matchups()
+    if not ordered:
+        return "\n".join(lines)
+
+    width = min(34, max(len(m.opponent) for m in ordered))
+    header = "  win%   " + "matchup".ljust(width) + "  record    prizes  turns"
+
+    def row(m) -> str:
+        return (
+            f"  {pct(m.win_rate)}  {m.opponent[:width].ljust(width)}"
+            f"  {m.wins}-{m.losses}-{m.ties}".ljust(len(str(m.games)) + 8)
+            + f"  {m.prize_margin:+5.1f}  {m.average_turns / 2:5.1f}"
+        )
+
+    if rows and rows * 2 < len(ordered):
+        lines += ["", f"Worst {rows} matchups", header]
+        lines += [row(m) for m in ordered[:rows]]
+        lines += ["", f"Best {rows} matchups", header]
+        lines += [row(m) for m in reversed(ordered[-rows:])]
+    else:
+        lines += ["", "Every matchup, worst first", header]
+        lines += [row(m) for m in ordered]
+    return "\n".join(lines)
+
+
 def render_comparison(reports: list[SimReport]) -> str:
     goals = [g.name for g in reports[0].goals]
     turns = min(r.turns for r in reports)

@@ -4,7 +4,7 @@ Pokémon: 13
 3 Charizard ex OBF 125
 2 Pidgey MEW 16
 2 Pidgeot ex OBF 164
-1 Radiant Greninja ASR 46
+1 Fezandipiti ex SFA 38
 
 Trainer: 34
 4 Professor's Research SVI 189

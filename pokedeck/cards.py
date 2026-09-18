@@ -61,6 +61,41 @@ class Effect:
         )
 
 
+_PATCHABLE_STRINGS = frozenset({
+    "name", "evolves_from", "ability_name", "ability_trigger", "ability_text",
+    "weakness", "resistance", "rule_box", "card_id", "regulation", "set_id",
+})
+
+
+@dataclass(frozen=True)
+class Attack:
+    """A printed attack, plus whatever of its text the compiler understood."""
+
+    name: str
+    cost: tuple[str, ...] = ()
+    damage: int = 0
+    scaling: str = ""  # "" | "+" | "x" — a printed 180+ or 30x
+    text: str = ""
+    effects: tuple[Effect, ...] = ()
+    scripted: bool = True  # False when the text says more than we modelled
+
+    @property
+    def cost_size(self) -> int:
+        return len(self.cost)
+
+    @classmethod
+    def from_dict(cls, raw: dict) -> "Attack":
+        return cls(
+            name=raw.get("name", "Attack"),
+            cost=tuple(raw.get("cost", ())),
+            damage=int(raw.get("damage", 0)),
+            scaling=raw.get("scaling", ""),
+            text=raw.get("text", ""),
+            effects=tuple(Effect.from_dict(e) for e in raw.get("effects", ())),
+            scripted=bool(raw.get("scripted", True)),
+        )
+
+
 @dataclass(frozen=True)
 class Card:
     name: str
@@ -71,8 +106,25 @@ class Card:
     effects: tuple[Effect, ...] = ()
     ability: tuple[Effect, ...] = ()
     ability_name: str | None = None
-    ability_trigger: str = "turn"  # "turn" (once per turn) or "on_play"
+    ability_trigger: str = "turn"  # "turn", "on_play" or "on_evolve"
+    ability_text: str = ""
     known: bool = False
+
+    # Battle data, filled in from the card pool.
+    hp: int = 0
+    types: tuple[str, ...] = ()
+    weakness: str = ""
+    resistance: str = ""
+    resistance_value: int = 30
+    retreat: int = 0
+    attacks: tuple[Attack, ...] = ()
+    prize_value: int = 1
+    rule_box: str = ""  # "ex", "V", "VSTAR", "VMAX", ...
+    card_id: str = ""
+    regulation: str = ""
+    set_id: str = ""
+    energy_provides: tuple[str, ...] = ()
+    energy_count: int = 1
 
     @property
     def is_basic_pokemon(self) -> bool:
@@ -85,6 +137,14 @@ class Card:
     @property
     def is_basic_energy(self) -> bool:
         return self.subtype is Subtype.BASIC_ENERGY
+
+    @property
+    def is_energy(self) -> bool:
+        return self.category is Category.ENERGY
+
+    @property
+    def fully_scripted(self) -> bool:
+        return all(a.scripted for a in self.attacks)
 
     @property
     def draw_value(self) -> int:
@@ -111,12 +171,49 @@ class Card:
             ability=tuple(Effect.from_dict(e) for e in raw.get("ability", ())),
             ability_name=raw.get("ability_name"),
             ability_trigger=raw.get("ability_trigger", "turn"),
+            ability_text=raw.get("ability_text", ""),
+            hp=int(raw.get("hp", 0)),
+            types=tuple(raw.get("types", ())),
+            weakness=raw.get("weakness", ""),
+            resistance=raw.get("resistance", ""),
+            resistance_value=int(raw.get("resistance_value", 30)),
+            retreat=int(raw.get("retreat", 0)),
+            attacks=tuple(Attack.from_dict(a) for a in raw.get("attacks", ())),
+            prize_value=int(raw.get("prize_value", 1)),
+            rule_box=raw.get("rule_box", ""),
+            card_id=raw.get("card_id", ""),
+            regulation=raw.get("regulation", ""),
+            set_id=raw.get("set_id", ""),
+            energy_provides=tuple(raw.get("energy_provides", ())),
+            energy_count=int(raw.get("energy_count", 1)),
             known=True,
         )
 
     def merged_with(self, raw: dict) -> "Card":
-        """Return a copy updated by the non-empty fields of ``raw``."""
-        return replace(Card.from_dict({**self.to_dict(), **raw}))
+        """Return a copy patched by the keys present in ``raw``.
+
+        Pool data supplies the printed stats; a curated entry only has to name
+        the fields it corrects, usually the effect script.
+        """
+        patch: dict = {}
+        for key, value in raw.items():
+            if key == "category":
+                patch["category"] = Category(value)
+            elif key == "subtype":
+                patch["subtype"] = Subtype(value)
+            elif key == "stage":
+                patch["stage"] = Stage(value)
+            elif key in ("effects", "ability"):
+                patch[key] = tuple(Effect.from_dict(e) for e in value)
+            elif key == "attacks":
+                patch[key] = tuple(Attack.from_dict(a) for a in value)
+            elif key in ("hp", "retreat", "prize_value", "resistance_value", "energy_count"):
+                patch[key] = int(value)
+            elif key in ("types", "energy_provides"):
+                patch[key] = tuple(value)
+            elif key in _PATCHABLE_STRINGS:
+                patch[key] = value
+        return replace(self, known=True, **patch)
 
     def to_dict(self) -> dict:
         data: dict = {

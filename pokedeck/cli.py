@@ -12,8 +12,10 @@ from .cards import Category, Deck, Stage
 from .decklist import DecklistError, parse_file, validate
 from .engine import IN_PLAY_PREFIX, Config, play_game
 from .knowledge import Resolution, load_overrides, resolve
+from .gauntlet import load_field, run_gauntlet
 from .report import (
     render_check,
+    render_gauntlet,
     render_comparison,
     render_hands,
     render_odds_table,
@@ -56,6 +58,15 @@ def _build_parser() -> argparse.ArgumentParser:
     odds.add_argument("--card", action="append", default=[], help="card name (repeatable)")
     odds.add_argument("--turns", type=int, default=3)
     odds.set_defaults(handler=_cmd_odds)
+
+    gauntlet = subs.add_parser("gauntlet", help="play 10 games against each of 100 opposing decks")
+    _add_common(gauntlet)
+    gauntlet.add_argument("-n", "--games", type=int, default=10, help="games per opposing deck")
+    gauntlet.add_argument("--decks", type=int, default=0, help="use only the first N opposing decks")
+    gauntlet.add_argument("--rows", type=int, default=0, help="show only the N worst and best matchups")
+    gauntlet.add_argument("--seed", type=int, default=0)
+    gauntlet.add_argument("--turn-limit", type=int, default=60, help="half-turns before a draw")
+    gauntlet.set_defaults(handler=_cmd_gauntlet)
 
     compare = subs.add_parser("compare", help="simulate several decks and line up the results")
     compare.add_argument("decklists", nargs="+")
@@ -158,6 +169,55 @@ def _cmd_odds(args) -> int:
     else:
         print(render_odds_table(deck, names, args.turns))
     return 0
+
+
+def _cmd_gauntlet(args) -> int:
+    deck, resolution = _load(args.decklist, args.cards)
+    field = load_field(args.decks or None)
+    report = run_gauntlet(
+        deck,
+        resolution,
+        field,
+        games_per_deck=args.games,
+        seed=args.seed,
+        turn_limit=args.turn_limit,
+    )
+    if args.json:
+        print(json.dumps(_gauntlet_json(report), indent=2))
+    else:
+        print(render_gauntlet(report, rows=args.rows))
+    return 0
+
+
+def _gauntlet_json(report) -> dict:
+    return {
+        "deck": report.deck_name,
+        "games": report.games,
+        "opponents": report.opponents,
+        "record": {"wins": report.wins, "losses": report.losses, "ties": report.ties},
+        "win_rate": report.win_rate,
+        "win_rate_first": report.win_rate_first,
+        "win_rate_second": report.win_rate_second,
+        "prize_margin": report.prize_margin,
+        "average_turns": report.average_turns,
+        "decided_by": dict(report.reasons),
+        "coverage": report.coverage,
+        "unknown_cards": report.unknown_cards,
+        "partial_cards": report.partial_cards,
+        "matchups": [
+            {
+                "opponent": m.opponent,
+                "games": m.games,
+                "wins": m.wins,
+                "losses": m.losses,
+                "ties": m.ties,
+                "win_rate": m.win_rate,
+                "prize_margin": m.prize_margin,
+                "average_turns": m.average_turns,
+            }
+            for m in report.sorted_matchups()
+        ],
+    }
 
 
 def _cmd_compare(args) -> int:

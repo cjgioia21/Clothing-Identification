@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pokedeck"
 version = "0.1.0"
-description = "Playtest Pokemon TCG decks: legality checks, exact draw odds, and Monte Carlo consistency simulation."
+description = "Playtest Pokemon TCG decks: legality checks, draw odds, consistency simulation, and 1000 real games against a 100-deck gauntlet."
 requires-python = ">=3.10"
 dependencies = []
 
@@ -19,7 +19,7 @@ pokedeck = "pokedeck.cli:main"
 include = ["pokedeck*"]
 
 [tool.setuptools.package-data]
-pokedeck = ["data/*.json"]
+pokedeck = ["data/*.json", "data/*.json.gz", "data/gauntlet/*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

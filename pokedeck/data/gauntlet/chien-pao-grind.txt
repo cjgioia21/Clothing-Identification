@@ -1,0 +1,27 @@
+# Chien-Pao ex (grind)
+Pokémon: 12
+1 Arctibax PAL 59
+1 Fan Rotom ASH 171
+3 Baxcalibur PAL 60
+3 Frigibax PAL 58
+4 Chien-Pao ex PAL 61
+
+Trainer: 35
+1 Artazon PAL 171
+1 Arven SVI 166
+1 Night Stretcher MEG 173
+2 Boss's Orders MEG 114
+2 Super Rod PAL 188
+2 Switch MEG 130
+3 Buddy-Buddy Poffin MEG 167
+3 Iono PAL 185
+4 Counter Catcher PAR 160
+4 Nest Ball SVI 181
+4 Professor's Research SVI 189
+4 Rare Candy MEG 125
+4 Ultra Ball MEG 131
+
+Energy: 13
+13 Basic Water Energy
+
+Total Cards: 60

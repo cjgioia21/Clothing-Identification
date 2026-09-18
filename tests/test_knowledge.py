@@ -18,10 +18,10 @@ def test_known_cards_keep_their_printed_behaviour(charizard_kb):
 
 
 def test_unknown_cards_are_reported_and_stubbed():
-    deck = parse("Pokémon: 2\n2 Spoink XYZ 1\n\nTrainer: 2\n2 Mysterious Gadget XYZ 2")
+    deck = parse("Pokémon: 2\n2 Glitchmon XYZ 1\n\nTrainer: 2\n2 Mysterious Gadget XYZ 2")
     resolution = resolve(deck)
-    assert sorted(resolution.unknown) == ["Mysterious Gadget", "Spoink"]
-    assert resolution.get("Spoink").is_basic_pokemon
+    assert sorted(resolution.unknown) == ["Glitchmon", "Mysterious Gadget"]
+    assert resolution.get("Glitchmon").is_basic_pokemon
     assert resolution.get("Mysterious Gadget").subtype is Subtype.ITEM
     assert resolution.get("Mysterious Gadget").effects == ()
 
@@ -41,13 +41,13 @@ def test_special_energy_is_not_basic_energy():
 def test_overrides_fill_in_missing_cards(tmp_path):
     path = tmp_path / "cards.json"
     path.write_text(json.dumps({"cards": [
-        {"name": "Spoink", "category": "pokemon", "stage": "basic",
+        {"name": "Glitchmon", "category": "pokemon", "stage": "basic",
          "ability_name": "Bounce", "ability": [{"op": "draw", "n": 2}]}
     ]}), encoding="utf-8")
-    deck = parse("Pokémon: 2\n2 Spoink XYZ 1")
+    deck = parse("Pokémon: 2\n2 Glitchmon XYZ 1")
     resolution = resolve(deck, load_overrides(str(path)))
     assert resolution.unknown == []
-    assert resolution.get("Spoink").ability[0].n == 2
+    assert resolution.get("Glitchmon").ability[0].n == 2
 
 
 def test_overrides_can_correct_a_bundled_card(tmp_path):

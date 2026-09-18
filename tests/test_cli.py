@@ -76,6 +76,22 @@ def test_compare_lines_up_two_decks(deck_path, capsys):
     assert out.count("charizard.txt") == 2
 
 
+def test_gauntlet_plays_the_field(deck_path, capsys):
+    assert main(["gauntlet", deck_path, "-n", "2", "--decks", "5"]) == 0
+    out = capsys.readouterr().out
+    assert "vs the gauntlet" in out
+    assert "record" in out
+    assert "going second" in out
+
+
+def test_gauntlet_json_reports_every_matchup(deck_path, capsys):
+    main(["gauntlet", deck_path, "-n", "2", "--decks", "4", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["games"] == 8
+    assert len(payload["matchups"]) == 4
+    assert payload["record"]["wins"] + payload["record"]["losses"] + payload["record"]["ties"] == 8
+
+
 def test_missing_file_is_an_error(capsys):
     assert main(["check", "nope.txt"]) == 2
     assert "error:" in capsys.readouterr().err

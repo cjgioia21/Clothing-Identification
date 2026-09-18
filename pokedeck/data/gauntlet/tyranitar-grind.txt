@@ -1,0 +1,28 @@
+# Tyranitar ex (grind)
+Pokémon: 11
+1 Fezandipiti ex ASH 142
+1 Jirachi SCR 98
+2 Pupitar JTG 81
+3 Tyranitar ex PRE 64
+4 Larvitar JTG 80
+
+Trainer: 37
+1 Arven SVI 166
+1 Bravery Charm PAL 173
+1 Night Stretcher MEG 173
+2 Artazon PAL 171
+2 Boss's Orders MEG 114
+2 Super Rod PAL 188
+2 Switch MEG 130
+3 Buddy-Buddy Poffin MEG 167
+3 Iono PAL 185
+4 Counter Catcher PAR 160
+4 Nest Ball SVI 181
+4 Professor's Research SVI 189
+4 Rare Candy MEG 125
+4 Ultra Ball MEG 131
+
+Energy: 12
+12 Basic Darkness Energy
+
+Total Cards: 60
