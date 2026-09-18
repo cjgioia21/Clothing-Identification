@@ -1,217 +1,172 @@
-# Clothing ID
+# pokedeck
 
-Point it at photos of a garment's care tag and the garment itself. It reads the tag,
-identifies the piece, checks the RN against the registry, and prices it **from real
-sales** — comparable listings with dates and URLs, not a made-up multiplier.
+Playtest Pokémon TCG decks without shuffling: paste a decklist export, get
+legality checks, exact draw odds, and a Monte Carlo goldfish simulation of the
+first few turns.
 
-```
-$ clothing-id tag.jpg front.jpg
-
-  Patagonia Synchilla Snap-T Pullover
-  ----------------------------------------
-  brand                  Patagonia
-  category               sweatshirt / fleece pullover
-  era                    1990s
-  size                   M
-  fabric                 100% polyester
-  made in                United States
-  RN                     RN 51884
-  condition              good
-  flaws                  light pilling on the body
-  rarity signals         made in usa, single stitch
-  id confidence          88%
-  RN registrant          Patagonia, Inc. (confirms brand)
-
-  Value estimate
-  ----------------------------------------
-  basis                  priced from observed sales
-  resale range           $74 - $96 USD
-  most likely            $95 USD
-  model says             $54
-  est. original retail   $98 USD
-  confidence             59%
-
-  Evidence
-  listings used          8 (8 sold, 0 asking)
-  covering               2026-04-27 to 2026-09-01
-  sample median          $95
-  spread (p20-p80)       23% of mid
-  sources                ebay-sold: 6, history: 2
-
-  Comparables
-          $95  sold  2026-09-01  Patagonia Synchilla Snap-T M
-                https://www.ebay.com/itm/...
-          $88  sold  2026-08-14  Patagonia Snap-T Fleece Pullover Green M
-                https://www.ebay.com/itm/...
-```
-
-## Where the numbers come from
-
-Every estimate says which of three bases produced it, and never pretends to more:
-
-| basis | meaning |
-| --- | --- |
-| `observed` | priced from real transactions alone |
-| `blended` | too few observations to stand alone, mixed with the model in proportion to the evidence |
-| `modeled` | no market data was available; heuristic tables, labelled as a guess |
-
-**Sources of real data**, in the order they are used:
-
-1. **Your local history database** (`~/.clothing-id/history.db`) — every price this tool
-   has ever seen: your own past sales, imported marketplace exports, and everything
-   fetched on previous runs. Works with no network. Import with
-   `clothing-id import sold.csv`.
-2. **eBay Marketplace Insights** — what comparable items *actually sold for* in the last
-   90 days. Needs a production keyset with Buy API access
-   (`EBAY_CLIENT_ID` / `EBAY_CLIENT_SECRET`).
-3. **eBay Browse** — current asking prices, available to any production keyset. Asks are
-   weaker evidence and are stored as such.
-4. **Cited web search** — the fallback when no eBay keyset is configured. The model
-   reports listings it found on the resale market; rows without a price *and* a source
-   URL are discarded rather than guessed at.
-
-Everything fetched is written back into the history database, so the evidence base grows
-with use and later valuations get cheaper and better.
-
-**How observations become a price** (`pricing.py`):
-
-- Each comparable is adjusted onto the target's **condition** grade. The ratios between
-  grades are measured from the sample when there are enough sales in each grade, and
-  fall back to documented priors otherwise — the report says which was used.
-- **Asking prices are discounted to sold terms** by the sold/ask ratio measured in the
-  same sample, or a 0.82 prior when it cannot be measured.
-- **Older sales are carried forward to today's money** by a price trend fitted to the
-  observations (least squares on log price vs. age), when there are ≥12 observations
-  spanning ≥180 days. Otherwise no trend is applied and the report says so.
-- What remains is weighted by **recency** (180-day half-life), evidence quality (a sale
-  counts more than an ask) and size match, then reduced to a **weighted median with a
-  real 20th–80th percentile band**. Gross outliers are trimmed with a median-absolute-
-  deviation rule, so one mispriced lot cannot drag the estimate.
-- **Confidence is earned**: it rises with effective sample size and the share of
-  completed sales, and falls with spread and staleness.
-
-The heuristic model (`valuation.py`) still exists, but only as the labelled fallback:
-
-```
-retail = category baseline × brand tier × fabric × construction
-resale = retail × tier recovery × condition × era × rarity × flaws × size
-```
-
-Every multiplier it applies is reported in `value.factors`, so a modeled number can be
-audited and re-tuned. Brand tiers live in `brands.py` (~300 brands, with tag aliases like
-`Levi Strauss & Co.` → Levi's and sub-labels like RRL and Carhartt WIP).
-
-## Identification, and checking it
-
-The vision pass (`identify.py`) is one Claude Opus 5 call with structured output. It
-transcribes the tag verbatim, records dating clues (logo variant, union label, "Made in
-USA", care-symbol style), describes construction and condition, and gives an honest
-confidence. Fields it cannot read stay `null` rather than being guessed.
-
-The one hard check a garment carries is its **RN number**. `rn.py` compares the RN on the
-tag with the company it is registered to, which catches relabels and fakes that copy a
-logo but not a number. The FTC publishes no bulk file or public API for the RN database,
-so this tool does not ship one and will not invent entries: supply a directory and it
-verifies, otherwise it prints the [FTC lookup URL](https://rn.ftc.gov/rns) for the number
-and claims nothing.
+No dependencies beyond the standard library.
 
 ```bash
-export CLOTHING_ID_RN_FILE=~/rn-directory.csv    # columns: rn,company
+pip install -e .
+pokedeck check examples/charizard.txt
 ```
 
-## Install
+## Commands
+
+### `check` — is the deck legal, and what shape is it?
+
+```
+$ pokedeck check examples/charizard.txt
+examples/charizard.txt — 60 cards
+
+Composition
+  pokemon              13
+  basics                7
+  evolutions            6
+  trainers             34
+  supporters           10
+  draw supporters       8
+  items                22
+  ball/search items    11
+  ...
+
+Opening-hand maths (no draw support)
+  mulligan rate (no Basic in 7)       39.9%
+  draw supporter in opening 7         65.4%
+  draw supporter by turn 2            75.1%
+```
+
+Exits non-zero when the deck breaks a construction rule (60 cards, four copies
+per card, at least one Pokémon; basic Energy is exempt from the copy limit).
+
+### `sim` — how often does the deck actually set up?
+
+```
+$ pokedeck sim examples/charizard.txt -n 5000 --turns 3 \
+    --goal "play:Charizard ex" --goal "Rare Candy + Charmander"
+
+Turn by turn
+  turn  supporter  bench  energy  hand
+     1   61.6%      2.1    0.7    4.0
+     2   44.5%      2.6    1.3    3.3
+     3   37.1%      2.9    1.8    3.4
+
+Setup odds (cumulative, card in hand or in play)
+  goal                         T0      T1      T2      T3     avg   prized
+  play:Charizard ex          0.0%    0.0%   38.9%   54.2%    2.28   28.8%
+  Rare Candy + Charmander   24.2%   57.0%   72.0%   80.3%    1.09   57.6%
+```
+
+Goal syntax:
+
+- `--goal "Charizard ex"` — the card is in hand or in play.
+- `--goal "play:Charizard ex"` — the card is on the board.
+- `--goal "Rare Candy + Charmander"` — every piece at once, checked the moment
+  they line up (not just at end of turn).
+- `prized` is the share of games where at least one piece of the goal started
+  in the prize cards.
+
+Without `--goal`, the deck's evolved Pokémon are used as the goals.
+
+Other flags: `--second` (play going second), `-n` games, `--turns`, `--seed`,
+`--json`, and `--dump-hand` to make the bot always fire off its biggest draw
+supporter instead of holding combo pieces.
+
+### `hand` — deal sample opening hands
+
+```
+$ pokedeck hand examples/gardevoir.txt -n 2 --seed 7
+```
+
+### `odds` — exact hypergeometric numbers, no simulation
+
+```
+$ pokedeck odds examples/charizard.txt --card "Rare Candy" --turns 2
+  card                            copies      T0      T1      T2   prized
+  Rare Candy                         4     39.9%   44.5%   48.8%    35.1%
+```
+
+### `compare` — the same goals across several lists
+
+```
+$ pokedeck compare list-a.txt list-b.txt -n 5000 --goal "play:Charizard ex"
+```
+
+## Decklist format
+
+The PTCG Live / PTCGO export format, with or without set codes:
+
+```
+Pokémon: 13
+4 Charmander PAF 7
+3 Charizard ex OBF 125
+
+Trainer: 34
+4 Professor's Research SVI 189
+...
+
+Energy: 13
+9 Basic Fire Energy SVE 2
+```
+
+## Teaching it new cards
+
+`pokedeck/data/cards.json` holds the card behaviour the simulator knows about.
+Anything missing is simulated as a blank card of its decklist category (and
+reported, so you can see what was ignored). Add or correct cards with a JSON
+file of the same shape:
+
+```json
+{"cards": [
+  {"name": "Spoink", "category": "pokemon", "stage": "basic",
+   "ability_name": "Bounce", "ability": [{"op": "draw", "n": 2}]},
+  {"name": "Mystery Ball", "category": "trainer", "subtype": "item",
+   "effects": [{"op": "discard_from_hand", "n": 1},
+               {"op": "search", "filter": "basic_pokemon", "n": 1, "dest": "bench"}]}
+]}
+```
 
 ```bash
-pip install -e ".[api,dev]"
-export ANTHROPIC_API_KEY=sk-ant-...      # or: ant auth login
-
-# optional, for sold-price data
-export EBAY_CLIENT_ID=...                # production keyset with Buy API access
-export EBAY_CLIENT_SECRET=...
-export CLOTHING_ID_RN_FILE=~/rn.csv      # optional, for RN verification
+pokedeck sim deck.txt --cards my-cards.json
 ```
 
-## Use
+Effect ops: `draw`, `draw_to`, `draw_prizes`, `discard_hand`,
+`shuffle_hand_into_deck`, `discard_from_hand`, `search` (with `filter` and
+`dest`), `recover`. Search filters: `any`, `pokemon`, `basic_pokemon`, `item`,
+`tool`, `supporter`, `stadium`, `energy`, `basic_energy`. `ability_trigger` is
+`turn` (once per turn) or `on_play`.
 
-**CLI**
+## What the simulator does and does not model
 
-```bash
-clothing-id tag.jpg front.jpg            # identify, look up the market, price it
-clothing-id tag.jpg --offline            # price from stored history only, no network
-clothing-id tag.jpg --json               # full report incl. evidence and comparables
-clothing-id tag.jpg --notes "small hole at the hem"
+It goldfishes: one player, no opponent. Each turn it draws, uses abilities,
+plays search items, plays a draw supporter, evolves, and attaches one Energy,
+following a greedy policy:
 
-clothing-id import sold.csv              # load real sales into the history database
-clothing-id import asks.csv --kind ask --source depop
-clothing-id stats                        # what evidence is on file
-```
+- Balls that cost cards are held until the draw supporter has been played.
+- A hand-dumping supporter is held back only when the hand already has two
+  goal pieces and six or more cards (`--dump-hand` turns this off).
+- Discards are paid with blanks first, then spare Pokémon, then items — never
+  with goal pieces while anything else is available.
+- Evolution follows the real timing rule: nothing evolves on the first turn of
+  the game or the turn it hits the board; Rare Candy skips the middle stage.
 
-`import` reads eBay sold-listing exports, Poshmark/Depop sales reports and hand-kept
-spreadsheets: columns are matched case-insensitively (`sold price`/`price`/`sale price`,
-`sold date`/`date`, `brand`, `category`, `size`, `condition`, `url`), rows without a
-price and a date are skipped, and re-importing the same file adds nothing twice.
+It does not model: attacking, damage, knockouts, prize trades, the opponent's
+board, Stadium effects, Ability lock, or anything that depends on what the
+other player does. Numbers from `sim` are setup consistency, not win rates.
 
-**HTTP**
-
-```bash
-uvicorn clothing_id.api:app --reload     # upload page at http://127.0.0.1:8000
-curl -F images=@tag.jpg -F images=@front.jpg -F market=true \
-     http://127.0.0.1:8000/identify
-```
-
-**Python**
+## Library use
 
 ```python
-from clothing_id import SalesHistory, analyze_paths, estimate_value, import_csv
+from pokedeck import parse_file, resolve, Config, run
 
-import_csv("my-sales.csv")                       # your real sales become the baseline
-report = analyze_paths(["tag.jpg", "front.jpg"])
-
-print(report.summary())
-print(report.value.method)                       # observed | blended | modeled
-print(report.value.evidence.observation_count, report.value.evidence.date_range)
-for comp in report.value.comparables:
-    print(comp.price, "sold" if comp.sold else "ask", comp.observed_on, comp.url)
+deck = parse_file("deck.txt")
+report = run(deck, resolve(deck), Config(turns=3, goals=(("play:Charizard ex",),)), games=5000)
+print(report.goals[0].by_turn[2])
 ```
-
-Priced offline from history alone:
-
-```python
-with SalesHistory() as history:
-    observations = history.query(brand="Patagonia", category="jacket")
-value = estimate_value(read, observations=observations)
-```
-
-## Photo tips
-
-One straight-on shot of the brand/care tag with the text in focus, one of the whole
-garment flat, one of any flaw. Interior tags date a piece far more reliably than the
-garment does — a single-stitch hem, a union label or a "Made in USA" line moves the
-number more than the silhouette.
-
-## Accuracy
-
-This is a triage tool, not an appraisal.
-
-- **A modeled estimate is a guess.** With no comparable sales on file and no market
-  access, the number comes from brand and category tables. The report says `modeled`
-  when that happens — treat it as an order of magnitude, not a price.
-- eBay's sold-data window is **90 days**, so long-run trends only appear once your own
-  history has accumulated. Until then the report will say a trend could not be fitted.
-- Comparable *matching* is by brand, category, size and condition — not by exact model.
-  A rare colorway priced against ordinary ones will read low.
-- Counterfeits are not detected visually. RN verification is the only real check, and
-  only when you have supplied a directory.
-- Condition grading from photos is conservative; flaws you can feel but not see are
-  missed, and every observation's condition comes from how the *seller* graded it.
 
 ## Tests
 
 ```bash
-pytest        # 111 tests, no network or API key needed - clients and sources are stubbed
+pip install -e ".[dev]"
+pytest
 ```
-
-Covered: brand resolution, the observation store and CSV import, condition/ask-ratio
-measurement, trend fitting, outlier trimming, recency weighting, observed vs. blended vs.
-modeled selection, eBay response mapping and request shape, web-search hygiene (no price
-without a URL), RN verification, the CLI and the HTTP layer.
