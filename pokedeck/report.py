@@ -184,7 +184,7 @@ def render_gauntlet(report, rows: int = 0) -> str:
     """The gauntlet result: record, splits, and the matchup table."""
     lines = [
         f"{report.deck_name} vs the gauntlet — {report.opponents} decks × "
-        f"{report.games_per_deck} games ({report.games} games)",
+        f"{report.games_per_deck} games ({report.games} games, {report.policy} player)",
         "",
         f"  record            {report.wins}-{report.losses}-{report.ties}"
         f"   ({pct(report.win_rate).strip()} ±{report.margin() * 100:.1f}%)",

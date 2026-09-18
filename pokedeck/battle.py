@@ -46,6 +46,21 @@ class Spot:
     shield_until: int = -1
     blocked_until: int = -1  # set by "can't attack during your next turn"
 
+    def copy(self) -> "Spot":
+        clone = Spot(stack=list(self.stack), turn_played=self.turn_played)
+        clone.energy = list(self.energy)
+        clone.tool = self.tool
+        clone.damage = self.damage
+        clone.condition = self.condition
+        clone.poisoned = self.poisoned
+        clone.burned = self.burned
+        clone.condition_turn = self.condition_turn
+        clone.ability_used_turn = self.ability_used_turn
+        clone.shield = self.shield
+        clone.shield_until = self.shield_until
+        clone.blocked_until = self.blocked_until
+        return clone
+
     @property
     def card(self) -> Card:
         return self.stack[-1]
@@ -141,6 +156,22 @@ class Side:
         self.bench.append(spot)
         return spot
 
+    def copy(self) -> "Side":
+        clone = Side(name=self.name, deck=list(self.deck), resolution=self.resolution)
+        clone.hand = list(self.hand)
+        clone.discard = list(self.discard)
+        clone.prizes = list(self.prizes)
+        clone.active = self.active.copy() if self.active else None
+        clone.bench = [spot.copy() for spot in self.bench]
+        clone.prizes_taken = self.prizes_taken
+        clone.mulligans = self.mulligans
+        clone.supporter_used = self.supporter_used
+        clone.energy_attached = self.energy_attached
+        clone.retreated = self.retreated
+        clone.stadium_used = self.stadium_used
+        clone.lost_pokemon = self.lost_pokemon
+        return clone
+
     def discard_spot(self, spot: Spot) -> None:
         self.discard.extend(spot.stack)
         self.discard.extend(spot.energy)
@@ -212,6 +243,50 @@ class Battle:
         self.reason = ""
 
     # ---------------------------------------------------------------- helpers
+    def clone(self, policies=None, determinize_for: int | None = None, seed: int = 0) -> "Battle":
+        """A copy of this game for a player to think on.
+
+        ``determinize_for`` reshuffles everything that player cannot see — their
+        own deck and prizes, and the opponent's hand, deck and prizes — so the
+        search plans against the game it can observe rather than reading the
+        opponent's hand off the table.
+        """
+        clone = Battle.__new__(Battle)
+        clone.decks = self.decks
+        clone.policies = policies if policies is not None else self.policies
+        clone.rng = random.Random(seed)
+        clone.turn_limit = self.turn_limit
+        clone.keep_log = False
+        clone.log = []
+        clone.sides = [side.copy() for side in self.sides]
+        clone.first = self.first
+        clone.turn = self.turn
+        clone.current = self.current
+        clone.stadium = self.stadium
+        clone.stadium_owner = self.stadium_owner
+        clone.finished = self.finished
+        clone.winner = self.winner
+        clone.reason = self.reason
+        if determinize_for is not None:
+            clone._determinize(determinize_for)
+        return clone
+
+    def _determinize(self, index: int) -> None:
+        """Re-deal the cards this player has no business knowing."""
+        mine = self.sides[index]
+        hidden = mine.deck + mine.prizes
+        self.rng.shuffle(hidden)
+        mine.deck = hidden[len(mine.prizes):]
+        mine.prizes = hidden[:len(mine.prizes)]
+
+        theirs = self.sides[1 - index]
+        unseen = theirs.deck + theirs.prizes + theirs.hand
+        self.rng.shuffle(unseen)
+        hand_size, prize_size = len(theirs.hand), len(theirs.prizes)
+        theirs.hand = unseen[:hand_size]
+        theirs.prizes = unseen[hand_size:hand_size + prize_size]
+        theirs.deck = unseen[hand_size + prize_size:]
+
     def note(self, message: str) -> None:
         if self.keep_log:
             self.log.append(f"T{self.turn} {message}")

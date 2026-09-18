@@ -470,18 +470,19 @@ class Policy:
     def card_value(self, battle, index: int, card: Card) -> int:
         """A rough 0-10 ranking used for searches, discards and benching."""
         side = battle.sides[index]
-        in_play = {s.name for s in side.in_play()}
         if card.category is Category.POKEMON:
-            if card.is_basic_pokemon and len(side.in_play()) <= 2:
+            spots = side.in_play()
+            if card.is_basic_pokemon and len(spots) <= 2:
                 return 10  # running out of Pokémon loses the game on the spot
-            if card.evolves_from in in_play:
+            if card.evolves_from and any(s.name == card.evolves_from for s in spots):
                 return 10
             if card.stage is Stage.STAGE2 and self.candy_ready(battle, index, card):
                 return 10
             if card.is_basic_pokemon:
-                evolves = any(c.evolves_from == card.name for c in side.resolution.cards.values())
+                if card.name in side.resolution.evolution_sources:
+                    return 9
                 power = max((a.damage for a in card.attacks), default=0)
-                return 9 if evolves else 6 + min(2, power // 120)
+                return 6 + min(2, power // 120)
             return 7
         if card.name == "Rare Candy":
             ready = any(

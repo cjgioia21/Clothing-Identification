@@ -1,3 +1,5 @@
+import pytest
+
 from pokedeck.decklist import parse_file, validate
 from pokedeck.gauntlet import load_field, run_gauntlet
 from pokedeck.knowledge import resolve
@@ -59,12 +61,40 @@ def test_coverage_is_reported(charizard_deck, charizard_kb):
     assert report.unknown_cards == []
 
 
+def test_policies_can_be_chosen_and_are_validated(charizard_deck, charizard_kb):
+    from pokedeck.gauntlet import make_policy
+    from pokedeck.planner import ChampionPolicy
+    from pokedeck.policy import Policy
+
+    assert isinstance(make_policy("greedy"), Policy)
+    assert isinstance(make_policy("champion"), ChampionPolicy)
+    with pytest.raises(ValueError):
+        make_policy("world-champion")
+
+
+def test_splitting_across_workers_changes_nothing(charizard_deck, charizard_kb):
+    field = load_field(4)
+    one = run_gauntlet(charizard_deck, charizard_kb, field, games_per_deck=2, seed=11,
+                       policy="greedy", workers=1)
+    many = run_gauntlet(charizard_deck, charizard_kb, field, games_per_deck=2, seed=11,
+                        policy="greedy", workers=2)
+    assert (one.wins, one.losses, one.prizes_for) == (many.wins, many.losses, many.prizes_for)
+    assert [m.opponent for m in one.matchups] == [m.opponent for m in many.matchups]
+
+
+def test_the_searching_player_runs_the_gauntlet(charizard_deck, charizard_kb):
+    report = run_gauntlet(charizard_deck, charizard_kb, load_field(2), games_per_deck=2,
+                          policy="champion", workers=1)
+    assert report.games == 4
+    assert report.policy == "champion"
+
+
 def test_a_deck_of_blanks_loses_to_the_field():
     text = "Pokémon: 20\n20 Glitchmon XYZ 1\n\nEnergy: 40\n40 Basic Fire Energy SVE 2"
     from pokedeck.decklist import parse
 
     deck = parse(text, name="blanks")
     resolution = resolve(deck)
-    report = run_gauntlet(deck, resolution, load_field(5), games_per_deck=4, seed=6)
+    report = run_gauntlet(deck, resolution, load_field(5), games_per_deck=4, seed=6, policy="greedy")
     assert report.win_rate < 0.25
     assert "Glitchmon" in report.unknown_cards

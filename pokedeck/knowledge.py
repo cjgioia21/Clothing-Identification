@@ -40,6 +40,17 @@ class Resolution:
             return None
         return self.cards.get(name) or self.related.get(name)
 
+    @property
+    def evolution_sources(self) -> frozenset[str]:
+        """Names that something in this deck evolves from, worked out once."""
+        cached = getattr(self, "_evolution_sources", None)
+        if cached is None:
+            cached = frozenset(
+                card.evolves_from for card in self.cards.values() if card.evolves_from
+            )
+            object.__setattr__(self, "_evolution_sources", cached)
+        return cached
+
     def coverage(self) -> float:
         """Share of the deck's distinct cards whose text is fully modelled."""
         if not self.cards:

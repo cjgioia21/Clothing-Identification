@@ -12,6 +12,8 @@ from .decklist import DecklistError, Issue, format_deck, parse, parse_file, vali
 from .battle import Battle, BattleDeck, BattleResult
 from .engine import Config, GameResult, play_game
 from .gauntlet import GauntletReport, load_field, run_gauntlet
+from .scoring import evaluate
+from .planner import ChampionPolicy
 from .policy import Policy
 from .pool import load_pool
 from .knowledge import Resolution, resolve
@@ -22,6 +24,7 @@ __all__ = [
     "BattleDeck",
     "BattleResult",
     "Card",
+    "ChampionPolicy",
     "Config",
     "Deck",
     "DeckEntry",
@@ -32,6 +35,7 @@ __all__ = [
     "Policy",
     "Resolution",
     "SimReport",
+    "evaluate",
     "format_deck",
     "load_field",
     "load_pool",

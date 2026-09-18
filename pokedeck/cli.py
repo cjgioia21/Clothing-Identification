@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import sys
 from dataclasses import asdict
@@ -14,7 +15,7 @@ from .engine import IN_PLAY_PREFIX, Config, play_game
 from .knowledge import Resolution, load_overrides, resolve
 from .legality import FORMATS
 from .legality import check as legality_check
-from .gauntlet import load_field, run_gauntlet
+from .gauntlet import POLICIES, load_field, run_gauntlet
 from .report import (
     render_check,
     render_gauntlet,
@@ -70,6 +71,12 @@ def _build_parser() -> argparse.ArgumentParser:
     gauntlet.add_argument("--rows", type=int, default=0, help="show only the N worst and best matchups")
     gauntlet.add_argument("--seed", type=int, default=0)
     gauntlet.add_argument("--turn-limit", type=int, default=60, help="half-turns before a draw")
+    gauntlet.add_argument("--policy", default="champion", choices=list(POLICIES),
+                          help="how your deck is played (default: champion, which searches)")
+    gauntlet.add_argument("--opponent-policy", default=None, choices=list(POLICIES),
+                          help="how the field is played (default: the same as --policy)")
+    gauntlet.add_argument("--workers", type=int, default=min(4, os.cpu_count() or 1),
+                          help="processes to split the field across")
     gauntlet.set_defaults(handler=_cmd_gauntlet)
 
     compare = subs.add_parser("compare", help="simulate several decks and line up the results")
@@ -188,6 +195,9 @@ def _cmd_gauntlet(args) -> int:
         games_per_deck=args.games,
         seed=args.seed,
         turn_limit=args.turn_limit,
+        policy=args.policy,
+        opponent_policy=args.opponent_policy,
+        workers=args.workers,
     )
     if args.json:
         print(json.dumps(_gauntlet_json(report), indent=2))
@@ -199,6 +209,7 @@ def _cmd_gauntlet(args) -> int:
 def _gauntlet_json(report) -> dict:
     return {
         "deck": report.deck_name,
+        "policy": report.policy,
         "games": report.games,
         "opponents": report.opponents,
         "record": {"wins": report.wins, "losses": report.losses, "ties": report.ties},

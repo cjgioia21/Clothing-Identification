@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 from collections import Counter
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from importlib import resources
 from statistics import fmean
@@ -12,7 +13,19 @@ from .battle import DEFAULT_TURN_LIMIT, Battle, BattleDeck
 from .decklist import Deck, parse
 from .knowledge import Resolution, resolve
 from .legality import card_is_legal
+from .planner import ChampionPolicy
 from .policy import Policy
+
+POLICIES = ("champion", "greedy")
+
+
+def make_policy(name: str, seed: int = 0):
+    """Build a player. ``champion`` searches its turn; ``greedy`` follows rules."""
+    if name == "greedy":
+        return Policy()
+    if name == "champion":
+        return ChampionPolicy(seed=seed)
+    raise ValueError(f"unknown policy {name!r} (try: {', '.join(POLICIES)})")
 
 FIELD_PACKAGE = "pokedeck.data.gauntlet"
 
@@ -44,10 +57,22 @@ class Matchup:
 
 
 @dataclass
+class MatchupOutcome:
+    """One opponent's worth of games, as a worker hands it back."""
+
+    matchup: Matchup
+    first_games: int = 0
+    first_wins: int = 0
+    second_games: int = 0
+    second_wins: int = 0
+
+
+@dataclass
 class GauntletReport:
     deck_name: str
     opponents: int
     games_per_deck: int
+    policy: str = "greedy"
     games: int = 0
     wins: int = 0
     losses: int = 0
@@ -120,18 +145,25 @@ def run_gauntlet(
     seed: int = 0,
     turn_limit: int = DEFAULT_TURN_LIMIT,
     opponents: int | None = None,
+    policy: str = "greedy",
+    opponent_policy: str | None = None,
+    workers: int = 1,
 ) -> GauntletReport:
     """Play ``games_per_deck`` games against every deck in the field.
 
     Turn order alternates game by game, so a matchup is scored from both sides
-    of the coin flip rather than from whoever happened to start.
+    of the coin flip. ``workers`` splits the field across processes; the games
+    themselves are seeded per matchup, so the result does not depend on it.
     """
     field_decks = field_decks if field_decks is not None else load_field(opponents)
+    opponent_policy = opponent_policy or policy
     mine = BattleDeck.build(deck, resolution)
+
     report = GauntletReport(
         deck_name=deck.name,
         opponents=len(field_decks),
         games_per_deck=games_per_deck,
+        policy=policy,
         coverage=resolution.coverage(),
         unknown_cards=list(resolution.unknown),
         partial_cards=list(resolution.partial),
@@ -143,48 +175,76 @@ def run_gauntlet(
         ],
     )
 
-    for position, (opponent_deck, opponent_resolution) in enumerate(field_decks):
-        theirs = BattleDeck.build(opponent_deck, opponent_resolution)
-        matchup = Matchup(opponent=opponent_deck.name)
-        for game in range(games_per_deck):
-            rng = random.Random((seed, position, game).__hash__())
-            first = game % 2  # 0 = our deck starts
-            battle = Battle((mine, theirs), (Policy(), Policy()), rng, first=first, turn_limit=turn_limit)
-            result = battle.play()
-            _record(report, matchup, result, first)
-        report.matchups.append(matchup)
+    jobs = [
+        (mine, BattleDeck.build(opponent_deck, opponent_resolution), opponent_deck.name,
+         position, games_per_deck, seed, turn_limit, policy, opponent_policy)
+        for position, (opponent_deck, opponent_resolution) in enumerate(field_decks)
+    ]
+
+    if workers > 1 and len(jobs) > 1:
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            outcomes = list(pool.map(_play_matchup, jobs, chunksize=1))
+    else:
+        outcomes = [_play_matchup(job) for job in jobs]
+
+    for outcome in outcomes:
+        _merge(report, outcome)
     return report
 
 
-def _record(report: GauntletReport, matchup: Matchup, result, first: int) -> None:
+def _play_matchup(job) -> MatchupOutcome:
+    """All the games against one opponent — the unit of work for a worker."""
+    (mine, theirs, name, position, games, seed, turn_limit, policy, opponent_policy) = job
+    outcome = MatchupOutcome(matchup=Matchup(opponent=name))
+    for game in range(games):
+        rng = random.Random((seed, position, game).__hash__())
+        first = game % 2  # 0 = our deck starts
+        players = (
+            make_policy(policy, seed=rng.randrange(1 << 30)),
+            make_policy(opponent_policy, seed=rng.randrange(1 << 30)),
+        )
+        battle = Battle((mine, theirs), players, rng, first=first, turn_limit=turn_limit)
+        result = battle.play()
+        _score_game(outcome, result, first)
+    return outcome
+
+
+def _score_game(outcome: MatchupOutcome, result, first: int) -> None:
+    matchup = outcome.matchup
     mine, theirs = result.prizes_taken
     matchup.games += 1
     matchup.prizes_for += mine
     matchup.prizes_against += theirs
     matchup.turns.append(result.turns)
     matchup.reasons[result.reason] += 1
-
-    report.games += 1
-    report.prizes_for += mine
-    report.prizes_against += theirs
-    report.turns.append(result.turns)
-    report.reasons[result.reason] += 1
-
     if first == 0:
-        report.first_games += 1
+        outcome.first_games += 1
     else:
-        report.second_games += 1
-
+        outcome.second_games += 1
     if result.winner == 0:
         matchup.wins += 1
-        report.wins += 1
         if first == 0:
-            report.first_wins += 1
+            outcome.first_wins += 1
         else:
-            report.second_wins += 1
+            outcome.second_wins += 1
     elif result.winner == 1:
         matchup.losses += 1
-        report.losses += 1
     else:
         matchup.ties += 1
-        report.ties += 1
+
+
+def _merge(report: GauntletReport, outcome: MatchupOutcome) -> None:
+    matchup = outcome.matchup
+    report.matchups.append(matchup)
+    report.games += matchup.games
+    report.wins += matchup.wins
+    report.losses += matchup.losses
+    report.ties += matchup.ties
+    report.prizes_for += matchup.prizes_for
+    report.prizes_against += matchup.prizes_against
+    report.turns.extend(matchup.turns)
+    report.reasons.update(matchup.reasons)
+    report.first_games += outcome.first_games
+    report.first_wins += outcome.first_wins
+    report.second_games += outcome.second_games
+    report.second_wins += outcome.second_wins

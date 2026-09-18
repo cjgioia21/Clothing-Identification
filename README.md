@@ -24,31 +24,36 @@ pokedeck gauntlet examples/dragapult.txt
 matchup is scored from both sides of the coin flip.
 
 ```
-$ pokedeck gauntlet examples/dragapult.txt -n 10 --rows 5
-examples/dragapult.txt vs the gauntlet — 100 decks × 10 games (1000 games)
+$ pokedeck gauntlet examples/dragapult.txt -n 10 --rows 6
+examples/dragapult.txt vs the gauntlet — 100 decks × 10 games (1000 games, champion player)
 
-  record            680-318-2   (68.0% ±2.9%)
-  going first        70.0%   (500 games)
-  going second       66.0%   (500 games)
-  prize margin      +2.03 per game   (4.20 taken, 2.17 given)
-  game length       10.8 turns each
-  decided by        prizes 77%, bench-out 14%, deck-out 9%, turn-limit 0%
+  record            680-320-0   (68.0% ±2.9%)
+  going first        67.0%   (500 games)
+  going second       69.0%   (500 games)
+  prize margin      +2.25 per game   (4.08 taken, 1.83 given)
+  game length       8.9 turns each
+  decided by        prizes 70%, deck-out 16%, bench-out 14%
   card text modelled  96.0%
   partly modelled:      Lucian
 
-Worst 5 matchups
+Worst 6 matchups
   win%   matchup                            record    prizes  turns
-   10.0%  Greninja ex (aggro)                1-9-0   -3.2   10.0
-   20.0%  Mega Lucario ex (standard)         2-8-0   -2.5   10.3
+    0.0%  Archaludon ex (standard)           0-10-0   -4.6    9.7
+   20.0%  Palafin ex (aggro)                 2-8-0   -1.5   10.3
+   30.0%  Mega Lucario ex (techy)            3-7-0   -2.7    9.3
    ...
 ```
 
 If your own list is not Standard-legal the report says so and plays it anyway —
 the field stays legal, so you are told what you are measuring.
 
-A thousand games take about seven seconds. Flags: `-n` games per opponent,
-`--decks N` to cut the field down, `--rows N` for only the worst and best N
-matchups (the default prints all 100), `--seed`, `--turn-limit`, `--json`.
+Both sides are played by the searching player by default, which takes a few
+minutes for a thousand games across four cores; `--policy greedy` swaps in the
+heuristic player and finishes in about ten seconds when you just want a smoke
+test. Flags: `-n` games per opponent, `--decks N` to cut the field down,
+`--rows N` for only the worst and best N matchups (the default prints all 100),
+`--policy` / `--opponent-policy`, `--workers`, `--seed`, `--turn-limit`,
+`--json`.
 
 The field lives in `pokedeck/data/gauntlet/` as 100 readable decklists — 25
 archetypes (Dragapult ex, Hydreigon ex, Mega Lucario ex, Mega Dragonite ex,
@@ -61,7 +66,7 @@ Rebuild or edit the field with `python tools/build_gauntlet.py`.
 
 ## What the battle engine models
 
-Every game is played out properly, by the same heuristic player on both sides:
+Every game is played out properly, by the same player on both sides:
 
 - **Setup** — shuffle, seven cards, mulligans (and the extra draw they give the
   opponent), a Basic to the Active Spot, up to five on the Bench, six prizes.
@@ -81,11 +86,64 @@ Every game is played out properly, by the same heuristic player on both sides:
   Mega Evolution ex and VMAX three), promotion from the Bench, and all three win
   conditions: six prizes, no Pokémon left, or an empty deck on the draw step.
 
-The player it uses is a decent club player, not a champion: it benches early,
-evolves on curve, stacks Energy on the attacker that is closest to its real
-attack, draws only when the hand is thin (decking yourself is a loss), gusts
-with Boss's Orders when the gust scores a knockout, retreats a dead Active, and
-attacks for the knockout when one is available.
+## The player
+
+Two players ship with the tool, and `--policy` picks between them.
+
+**`champion` (default)** searches its turn instead of following a checklist.
+For every action it could take — use an Ability, play this Item, evolve that
+Pokémon, attach Energy here rather than there, retreat, attack with this — it
+clones the game, plays the action, finishes the turn, lets the opponent answer
+and plays its own follow-up, then scores the position that comes out. The
+action with the best average score is the one it actually takes, and then it
+searches again from the new position.
+
+Three things make that search honest and affordable:
+
+- **Determinization.** Every clone reshuffles what the player cannot see: its
+  own deck and prizes, and the opponent's hand, deck and prizes. The search
+  plans against the game it can observe rather than reading the opponent's hand
+  off the table.
+- **Common random numbers.** Every candidate for one decision is played out
+  against the *same* shuffles, so a line wins on merit rather than on being
+  handed the better deal.
+- **A cheap first pass.** One rollout each narrows the options to five
+  finalists; the full rollouts are spent on those.
+
+The position score is the one a player would recognise: prizes taken first,
+then whether the board can take a knockout next turn and survive the swing
+back, then development — Energy in play, attackers that are paid for, damage
+already on the board, bench size, how many prizes the bench is quietly owing
+the opponent, and how close either deck is to running out of cards.
+
+Measured against the heuristic player — same decks, same seeds, only the player
+different, 60 games each:
+
+| matchup | searching player wins |
+| --- | --- |
+| Dragapult mirror | 73% |
+| Dragapult vs Raging Bolt | 70% |
+| Raging Bolt mirror | 50% |
+
+That last row is the honest one. The Raging Bolt mirror is a deck-out race, and
+a search that only looks one turn ahead does not feel a race it cannot see the
+end of; the position score carries a deck-out term precisely because the search
+would otherwise draw itself to death there.
+
+**`greedy`** is the heuristic player: bench early, evolve on curve, stack Energy
+on the attacker closest to its real attack, draw only when the hand is thin
+(decking yourself is a loss), gust with Boss's Orders when the gust scores a
+knockout, retreat a dead Active, and attack for the knockout when one is there.
+It is a decent club player and it is fast, which is what makes it useful as the
+rollout player inside the search.
+
+**Neither is a world champion.** The search is one turn deep with a heuristic
+continuation: it does not plan a prize map three turns out, does not hold a
+card back for a read on the opponent's deck, does not know that a particular
+matchup is won by a line no evaluation function would score highly, and only
+understands the card text the compiler could read. It plays a clean, tactical
+game and it does not misplay the obvious things — that is the honest ceiling
+here.
 
 **Not modelled:** the Lost Zone, most damage-modifying Abilities, Stadium
 effects beyond occupying the slot, Ability lock, attack choices that depend on
