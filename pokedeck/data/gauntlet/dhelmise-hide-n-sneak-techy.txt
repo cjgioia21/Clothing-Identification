@@ -1,0 +1,32 @@
+# Dhelmise Hide n' Sneak (techy)
+
+Pokémon: 15
+4 Dhelmise SSP 10
+4 Shuppet PBL 33
+3 Banette PBL 34
+2 Munkidori PRE 44
+2 Budew PRE 4
+
+Trainer: 37
+1 Unfair Stamp TWM 165
+2 Nighttime Mine ASH 197
+4 Night Stretcher SFA 61
+1 Sacred Ash PFO 115
+4 Buddy-Buddy Poffin PRE 101
+4 Poké Pad PFO 81
+3 Ultra Ball MEG 131
+3 Lillie's Determination MEG 119
+4 Crushing Hammer PFO 71
+2 Xerosic's Machinations SFA 64
+2 Eri PRE 136
+2 Boss's Orders MEG 114
+2 Switch PHF 123
+1 Judge PFO 76
+1 Special Red Card CHR 82
+1 Jamming Tower TWM 153
+
+Energy: 8
+6 Basic Psychic Energy
+2 Basic Grass Energy
+
+Total Cards: 60

@@ -1,0 +1,33 @@
+# Alakazam Powerful Hand (techy)
+
+Pokémon: 20
+4 Abra MEG 54
+4 Kadabra MEG 55
+3 Alakazam MEP 3
+3 Dunsparce PRE 79
+2 Dudunsparce PRE 80
+1 Genesect PHF 8
+1 Fezandipiti ex SFA 38
+1 Rellor SSP 13
+1 Budew PRE 4
+
+Trainer: 33
+2 Dawn PHF 87
+2 Hilda WHT 84
+2 Nighttime Mine ASH 197
+3 Rare Candy MEG 125
+4 Buddy-Buddy Poffin PRE 101
+4 Poké Pad PFO 81
+3 Ultra Ball MEG 131
+3 Lillie's Determination MEG 119
+4 Crushing Hammer PFO 71
+2 Xerosic's Machinations SFA 64
+2 Eri PRE 136
+2 Boss's Orders MEG 114
+
+Energy: 7
+4 Telepathic Psychic Energy PFO 88
+2 Basic Psychic Energy
+1 Enriching Energy SSP 191
+
+Total Cards: 60

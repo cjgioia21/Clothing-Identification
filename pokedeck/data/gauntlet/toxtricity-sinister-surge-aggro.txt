@@ -1,0 +1,29 @@
+# Toxtricity Sinister Surge (aggro)
+
+Pokémon: 15
+4 Toxel PHF 67
+4 Toxtricity MEP 17
+4 Mega Darkrai ex PBL 48
+1 Fezandipiti ex SFA 38
+1 Budew PRE 4
+1 Mew ex 30TH 66
+
+Trainer: 33
+2 Grimsley's Move PHF 90
+2 Powerglass SFA 63
+2 Risky Ruins MEG 127
+4 Ultra Ball MEG 131
+4 Poké Pad PFO 81
+4 Buddy-Buddy Poffin PRE 101
+3 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+3 Energy Switch PBL 107
+2 Crispin PRE 105
+2 Switch PHF 123
+2 Night Stretcher SFA 61
+
+Energy: 12
+11 Basic Darkness Energy
+1 Prism Energy BLK 86
+
+Total Cards: 60

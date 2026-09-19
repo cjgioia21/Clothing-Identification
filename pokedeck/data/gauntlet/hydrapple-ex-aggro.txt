@@ -1,0 +1,27 @@
+# Hydrapple ex (aggro)
+
+Pokémon: 16
+4 Applin PRE 9
+3 Dipplin PRE 10
+4 Hydrapple ex PRE 11
+3 Teal Mask Ogerpon ex PRE 12
+1 Fezandipiti ex SFA 38
+1 Budew PRE 4
+
+Trainer: 32
+2 Bug Catching Set PRE 102
+2 Forest of Vitality PFO 109
+3 Rare Candy MEG 125
+4 Ultra Ball MEG 131
+4 Poké Pad PFO 81
+4 Buddy-Buddy Poffin PRE 101
+3 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+3 Energy Switch PBL 107
+2 Crispin PRE 105
+2 Switch PHF 123
+
+Energy: 12
+12 Basic Grass Energy
+
+Total Cards: 60

@@ -1,0 +1,29 @@
+# Festival Lead (techy)
+
+Pokémon: 19
+4 Applin PRE 9
+4 Dipplin PRE 10
+4 Grookey TWM 14
+3 Thwackey TWM 15
+2 Budew PRE 4
+1 Fezandipiti ex SFA 38
+1 Goldeen PBL 13
+
+Trainer: 33
+2 Festival Grounds PRE 108
+4 Night Stretcher SFA 61
+1 Sacred Ash PFO 115
+4 Buddy-Buddy Poffin PRE 101
+4 Poké Pad PFO 81
+3 Ultra Ball MEG 131
+3 Lillie's Determination MEG 119
+4 Crushing Hammer PFO 71
+2 Xerosic's Machinations SFA 64
+2 Eri PRE 136
+2 Boss's Orders MEG 114
+2 Switch PHF 123
+
+Energy: 8
+8 Basic Grass Energy
+
+Total Cards: 60

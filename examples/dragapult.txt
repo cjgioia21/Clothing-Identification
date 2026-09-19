@@ -1,0 +1,32 @@
+Pokémon: 16
+4 Dreepy ASH 158
+2 Drakloak ASH 159
+3 Dragapult ex ASH 160
+2 Duskull SFA 18
+1 Dusclops SFA 19
+2 Dusknoir SFA 20
+1 Fezandipiti ex ASH 142
+1 Munkidori ASH 99
+
+Trainer: 34
+4 Carmine TWM 145
+3 Lacey SCR 139
+2 Lucian TWM 157
+2 Boss's Orders MEG 114
+1 Judge PFO 76
+4 Ultra Ball MEG 131
+4 Rare Candy MEG 125
+3 Buddy-Buddy Poffin MEG 167
+2 Night Stretcher MEG 173
+2 Switch MEG 130
+1 Pokégear 3.0 BLK 84
+2 Rescue Board TEF 159
+1 Poké Pad ASH 198
+1 Hero's Cape TEF 152
+2 Pokémon Catcher PFO 82
+
+Energy: 10
+5 Basic Fire Energy
+5 Basic Psychic Energy
+
+Total Cards: 60

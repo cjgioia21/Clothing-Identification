@@ -1,0 +1,30 @@
+# Toxtricity Sinister Surge (techy)
+
+Pokémon: 15
+4 Toxel PHF 67
+4 Toxtricity MEP 17
+3 Mega Darkrai ex PBL 48
+1 Fezandipiti ex SFA 38
+2 Budew PRE 4
+1 Mew ex 30TH 66
+
+Trainer: 33
+2 Grimsley's Move PHF 90
+2 Powerglass SFA 63
+2 Risky Ruins MEG 127
+4 Crushing Hammer PFO 71
+2 Enhanced Hammer TWM 148
+2 Rust Syndicate Grunt PBL 81
+4 Buddy-Buddy Poffin PRE 101
+4 Poké Pad PFO 81
+3 Ultra Ball MEG 131
+3 Lillie's Determination MEG 119
+2 Xerosic's Machinations SFA 64
+2 Eri PRE 136
+1 Boss's Orders MEG 114
+
+Energy: 12
+11 Basic Darkness Energy
+1 Prism Energy BLK 86
+
+Total Cards: 60

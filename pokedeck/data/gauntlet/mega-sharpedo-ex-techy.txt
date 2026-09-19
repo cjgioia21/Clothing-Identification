@@ -1,0 +1,30 @@
+# Mega Sharpedo ex (techy)
+
+Pokémon: 14
+4 Carvanha TEF 42
+4 Mega Sharpedo ex PHF 61
+2 Munkidori PRE 44
+1 Fezandipiti ex SFA 38
+1 Pecharunt ex SFA 39
+2 Budew PRE 4
+
+Trainer: 34
+2 Risky Ruins MEG 127
+4 Crushing Hammer PFO 71
+2 Enhanced Hammer TWM 148
+2 Rust Syndicate Grunt PBL 81
+4 Buddy-Buddy Poffin PRE 101
+4 Poké Pad PFO 81
+3 Ultra Ball MEG 131
+3 Lillie's Determination MEG 119
+2 Xerosic's Machinations SFA 64
+2 Eri PRE 136
+2 Boss's Orders MEG 114
+2 Night Stretcher SFA 61
+2 Switch PHF 123
+
+Energy: 12
+10 Basic Darkness Energy
+2 Prism Energy BLK 86
+
+Total Cards: 60
