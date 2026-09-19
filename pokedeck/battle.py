@@ -725,6 +725,9 @@ class Battle:
         if source.startswith("named_in_play:"):
             wanted = source.split(":", 1)[1]
             return sum(1 for s in side.in_play() if wanted in s.name.casefold())
+        if source.startswith("named_bench:"):
+            wanted = source.split(":", 1)[1]
+            return sum(1 for s in side.bench if wanted in s.name.casefold())
         if source.startswith("attack:"):
             wanted = source.split(":", 1)[1].casefold()
             return sum(

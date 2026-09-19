@@ -280,3 +280,32 @@ def test_energy_is_never_moved_off_a_pokemon_that_has_none(battle):
                   Spot(stack=[twin], turn_played=0)]
     _move_energy(battle, 0, 3)          # more moves than there is Energy to move
     assert sum(len(s.energy) for s in side.in_play()) == 1
+
+
+# ------------------------------------------------- riders with a name attached
+def test_a_bench_rider_counts_only_the_pokemon_it_names(battle):
+    """Relicanth scales off Antique Fossils, not off whatever is on the Bench."""
+    effects, unread = compile_text(
+        'This attack does 30 more damage for each of your Benched Pokémon that '
+        'has "Antique" in its name.')
+    assert not unread
+    assert effects[0].filter == "named_bench:antique"
+
+    attack = Attack(name="Fossil Beatdown", cost=(), damage=10, effects=tuple(effects))
+    side = battle.sides[0]
+    side.bench = [Spot(stack=[basic("Wailord")], turn_played=0) for _ in range(3)]
+    spot, target = side.active, battle.sides[1].active
+    assert battle.attack_damage(0, attack, spot, target, {}) == 10
+
+    side.bench += [Spot(stack=[basic("Antique Cover Fossil")], turn_played=0),
+                   Spot(stack=[basic("Antique Helix Fossil")], turn_played=0)]
+    assert battle.attack_damage(0, attack, spot, target, {}) == 10 + 60
+
+
+def test_a_plain_bench_rider_still_counts_the_whole_bench(battle):
+    effects, _ = compile_text("This attack does 20 more damage for each of your Benched Pokémon.")
+    assert effects[0].filter == "own_bench"
+    attack = Attack(name="Swarm", cost=(), damage=10, effects=tuple(effects))
+    side = battle.sides[0]
+    side.bench = [Spot(stack=[basic(f"Friend {n}")], turn_played=0) for n in range(4)]
+    assert battle.attack_damage(0, attack, side.active, battle.sides[1].active, {}) == 90

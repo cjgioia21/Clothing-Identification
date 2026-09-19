@@ -1088,6 +1088,19 @@ def _checkup_counters(m):
     return [Effect(op="checkup_counters", n=int(m.group(1)) * 10, filter="has_ability")]
 
 
+@_pattern(r"does (\d+) more damage for each of your benched pok.mon that has \"?([\w' ]+?)\"? in its name", priority=33)
+def _bonus_per_named_bench(m):
+    """Relicanth counts the Antique Fossils behind it, not the whole Bench."""
+    return [Effect(op="bonus_per", n=int(m.group(1)),
+                   filter=f"named_bench:{m.group(2).strip().casefold()}")]
+
+
+@_pattern(r"this attack does (\d+) damage for each of your benched pok.mon that has \"?([\w' ]+?)\"? in its name", priority=33)
+def _scale_per_named_bench(m):
+    return [Effect(op="scale", n=int(m.group(1)),
+                   filter=f"named_bench:{m.group(2).strip().casefold()}")]
+
+
 @_pattern(r"your opponent's active pok.mon's retreat cost is (\{?c\}?(?:\{?c\}?)*) more", priority=32)
 def _retreat_tax(m):
     return [Effect(op="retreat_more", n=max(1, m.group(1).lower().count("c")))]
