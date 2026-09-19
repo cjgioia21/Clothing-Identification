@@ -1079,7 +1079,10 @@ class Battle:
                 side.lost_pokemon += 1
                 side.lost_on_turn = self.turn
                 bonus = taker.extra_prizes if spot.card.is_basic_pokemon else 0
-                self.take_prizes(winner, spot.prize_value + bonus)
+                shield = sum(e.n for e in (spot.tool.effects if spot.tool else ())
+                             if e.op == "prize_reduction")
+                owed = max(1, spot.prize_value + bonus - shield)
+                self.take_prizes(winner, owed)
                 if self.finished:
                     return
                 if side.active is None and not self.promote(index):

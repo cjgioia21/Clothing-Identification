@@ -1,0 +1,32 @@
+# Mega Lopunny ex (aggro)
+
+Pokémon: 14
+4 Buneary PHF 83
+4 Mega Lopunny ex PHF 84
+3 Latias ex SSP 76
+1 Fezandipiti ex SFA 38
+1 Meowth ex PFO 62
+1 Budew PRE 4
+
+Trainer: 34
+2 Battle Cage PHF 85
+4 Ultra Ball MEG 131
+4 Poké Pad PFO 81
+4 Buddy-Buddy Poffin PRE 101
+3 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+3 Energy Switch PBL 107
+2 Crispin PRE 105
+2 Switch PHF 123
+2 Night Stretcher SFA 61
+2 Energy Search PFO 72
+1 Prime Catcher PRE 119
+1 Pokégear 3.0 BLK 84
+1 Special Red Card CHR 82
+
+Energy: 12
+8 Basic Fighting Energy
+3 Prism Energy BLK 86
+1 Enriching Energy SSP 191
+
+Total Cards: 60

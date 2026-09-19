@@ -1,0 +1,32 @@
+# Crustle Mysterious Rock Inn (aggro)
+
+Pokémon: 15
+4 Dwebble DRI 11
+4 Crustle DRI 12
+3 Budew PRE 4
+2 Munkidori PRE 44
+1 Fezandipiti ex SFA 38
+1 Rellor SSP 13
+
+Trainer: 37
+1 Neutralization Zone SFA 60
+2 Mysterious Rock Inn
+4 Night Stretcher SFA 61
+1 Sacred Ash PFO 115
+4 Ultra Ball MEG 131
+4 Poké Pad PFO 81
+4 Buddy-Buddy Poffin PRE 101
+3 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+3 Energy Switch PBL 107
+2 Crispin PRE 105
+2 Switch PHF 123
+2 Energy Search PFO 72
+1 Pokégear 3.0 BLK 84
+1 Special Red Card CHR 82
+
+Energy: 8
+6 Basic Grass Energy
+2 Basic Fighting Energy
+
+Total Cards: 60

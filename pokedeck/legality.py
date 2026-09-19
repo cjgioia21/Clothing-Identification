@@ -3,6 +3,11 @@
 Standard rotates once a year by regulation mark. The April 2026 rotation
 dropped G, so Standard is currently H, I and J — plus basic Energy, which has
 no mark and never rotates.
+
+Some sets carry no regulation mark at all in the card data — the anniversary
+sets and the Energy-only products. That is a gap in what we know, not evidence
+that the card is illegal, so those are reported as unverified rather than
+rejected.
 """
 
 from __future__ import annotations
@@ -32,6 +37,11 @@ def card_is_legal(card, marks: frozenset[str] = STANDARD_MARKS) -> bool:
     return card.regulation.upper() in marks
 
 
+def mark_is_known(card) -> bool:
+    """Does the card data actually say what regulation mark this print has?"""
+    return bool(card.regulation)
+
+
 def check(deck: Deck, resolution: Resolution, format_name: str = "standard") -> list[Issue]:
     """Legality problems, as errors, plus warnings for cards we cannot verify.
 
@@ -57,10 +67,11 @@ def check(deck: Deck, resolution: Resolution, format_name: str = "standard") -> 
         if not card.known:
             issues.append(Issue("warning", f"{label}: no printed card found, legality unverified"))
             continue
-        if not card.regulation:
+        if not mark_is_known(card):
             issues.append(Issue(
-                "error",
-                f"{label} ({card.card_id}) has no regulation mark — not legal in {format_name}",
+                "warning",
+                f"{label} ({card.card_id}) carries no regulation mark in the card data — "
+                f"legality in {format_name} unverified",
             ))
             continue
         if not card_is_legal(card, marks):

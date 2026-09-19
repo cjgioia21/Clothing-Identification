@@ -1,0 +1,29 @@
+# Team Rocket's Mewtwo ex (aggro)
+
+Pokémon: 14
+4 Team Rocket's Mewtwo ex ASH 79
+3 Team Rocket's Mimikyu DRI 87
+3 Team Rocket's Spidops ASH 19
+2 Team Rocket's Tarountula ASH 18
+1 Fezandipiti ex SFA 38
+1 Munkidori PRE 44
+
+Trainer: 34
+4 Team Rocket's Petrel DRI 176
+2 Team Rocket's Venture Bomb DRI 179
+4 Team Rocket's Watchtower DRI 180
+4 Ultra Ball MEG 131
+4 Poké Pad PFO 81
+4 Buddy-Buddy Poffin PRE 101
+3 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+3 Energy Switch PBL 107
+2 Crispin PRE 105
+1 Switch PHF 123
+
+Energy: 12
+9 Basic Psychic Energy
+2 Basic Darkness Energy
+1 Prism Energy BLK 86
+
+Total Cards: 60

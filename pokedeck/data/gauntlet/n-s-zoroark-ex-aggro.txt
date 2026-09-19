@@ -1,0 +1,31 @@
+# N's Zoroark ex (aggro)
+
+Pokémon: 18
+4 N's Zorua JTG 97
+4 N's Zoroark ex JTG 98
+3 N's Zekrom MEP 31
+2 Munkidori PRE 44
+1 Pecharunt ex SFA 39
+1 Fezandipiti ex SFA 38
+1 Yveltal SFA 35
+1 N's Darumaka JTG 26
+1 N's Darmanitan JTG 27
+
+Trainer: 34
+3 N's PP Up JTG 153
+2 Transformation Tome CHR 83
+2 N's Castle JTG 152
+4 Ultra Ball MEG 131
+4 Poké Pad PFO 81
+4 Buddy-Buddy Poffin PRE 101
+3 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+3 Energy Switch PBL 107
+2 Crispin PRE 105
+2 Switch PHF 123
+2 Night Stretcher SFA 61
+
+Energy: 8
+8 Basic Darkness Energy
+
+Total Cards: 60

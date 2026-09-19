@@ -1,0 +1,32 @@
+# Mega Excadrill ex (grind)
+
+Pokémon: 14
+4 Drilbur BLK 45
+4 Mega Excadrill ex PBL 65
+2 Munkidori PRE 44
+1 Fezandipiti ex SFA 38
+1 Budew PRE 4
+1 Meowth ex PFO 62
+1 Mew ex 30TH 66
+
+Trainer: 35
+2 Battle Cage PHF 85
+4 Buddy-Buddy Poffin PRE 101
+4 Poké Pad PFO 81
+4 Ultra Ball MEG 131
+4 Lillie's Determination MEG 119
+3 Pokégear 3.0 BLK 84
+3 Night Stretcher SFA 61
+2 Switch PHF 123
+2 Hilda WHT 84
+2 Dawn PHF 87
+2 Boss's Orders MEG 114
+1 Crispin PRE 105
+1 Energy Search PFO 72
+1 Sacred Ash PFO 115
+
+Energy: 11
+9 Basic Fighting Energy
+2 Prism Energy BLK 86
+
+Total Cards: 60

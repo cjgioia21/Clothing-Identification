@@ -115,6 +115,22 @@ def useful(battle, index: int, effects, spot=None) -> bool:
             return True
         if op == "mill" and battle.opponent(index).deck:
             return True
+        if op == "discard_energy_target" and any(
+            any(c.subtype is Subtype.SPECIAL_ENERGY for c in s.energy)
+            if effect.filter == "special_energy" else bool(s.energy)
+            for s in battle.opponent(index).in_play()
+        ):
+            return True
+        if op == "discard_tools" and any(s.tool for s in battle.opponent(index).in_play()):
+            return True
+        if op == "evolve_from_deck" and spot is not None and any(
+            c.evolves_from == spot.name for c in side.deck
+        ):
+            return True
+        if op == "sift" and side.deck:
+            return True
+        if op == "swap_from_discard" and any(c.is_basic_pokemon for c in side.discard):
+            return True
         if op == "opponent_discard_to" and len(battle.opponent(index).hand) > effect.n:
             return True
         if op == "opponent_discard_filter" and any(
@@ -193,6 +209,23 @@ def _apply(battle, index: int, effect: Effect, spot) -> None:
             foe.discard.append(card)
     elif op == "place_counters":
         _place_counters(battle, index, effect)
+    elif op == "self_counters" and side.active is not None:
+        battle.damage_spot(index, side.active, effect.n, source="recoil")
+        battle.check_knockouts()
+    elif op == "discard_energy_target":
+        _strip_energy(battle, index, effect)
+    elif op == "discard_tools":
+        _scrap_tools(battle, index, effect)
+    elif op == "evolve_from_deck":
+        _ascend(battle, index, spot)
+    elif op == "sift":
+        for _ in range(min(effect.n, len(side.deck))):
+            top = side.deck[0]
+            if battle.policies[index].card_value(battle, index, top) > 4:
+                break  # worth keeping, so leave it where it is
+            side.discard.append(side.deck.pop(0))
+    elif op == "swap_from_discard":
+        _swap_from_discard(battle, index)
     elif op == "ko_self":
         if spot is not None:
             spot.damage = spot.max_hp
@@ -324,6 +357,67 @@ def _place_counters(battle, index: int, effect: Effect) -> None:
         )
         remaining.remove(pick)
         battle.damage_spot(1 - index, pick, effect.n, source="damage counters")
+
+
+def _strip_energy(battle, index: int, effect: Effect) -> None:
+    """Take Energy off the opponent, starting with whatever costs them most."""
+    foe = battle.opponent(index)
+    special = effect.filter == "special_energy"
+    for _ in range(max(1, effect.n)):
+        targets = [
+            (spot, card)
+            for spot in foe.in_play() for card in spot.energy
+            if not special or card.subtype is Subtype.SPECIAL_ENERGY
+        ]
+        if not targets:
+            return
+        # The Active first: that is the Energy about to pay for an attack.
+        spot, card = max(targets, key=lambda pair: (pair[0] is foe.active, len(pair[0].energy)))
+        spot.energy.remove(card)
+        foe.discard.append(card)
+
+
+def _scrap_tools(battle, index: int, effect: Effect) -> None:
+    """Tool Scrapper: the opponent's Tools are the ones worth discarding."""
+    foe = battle.opponent(index)
+    removed = 0
+    for spot in foe.in_play():
+        if removed >= effect.n:
+            return
+        if spot.tool is not None:
+            foe.discard.append(spot.tool)
+            spot.tool = None
+            removed += 1
+
+
+def _ascend(battle, index: int, spot) -> None:
+    """Search out the evolution of this exact Pokémon and put it straight on."""
+    if spot is None:
+        return
+    side = battle.sides[index]
+    found = next((c for c in side.deck if c.evolves_from == spot.name), None)
+    if found is None:
+        return
+    side.deck.remove(found)
+    spot.stack.append(found)
+    spot.condition = None
+    spot.ability_used_turn = -1
+    side.shuffle(battle.rng)
+
+
+def _swap_from_discard(battle, index: int) -> None:
+    """Trade a Basic in play for a Basic in the discard, attachments and all."""
+    side = battle.sides[index]
+    candidates = [c for c in side.discard if c.is_basic_pokemon]
+    in_play = [s for s in side.in_play() if s.card.is_basic_pokemon and len(s.stack) == 1]
+    if not candidates or not in_play:
+        return
+    policy = battle.policies[index]
+    incoming = max(candidates, key=lambda c: policy.card_value(battle, index, c))
+    outgoing = min(in_play, key=lambda s: policy.spot_value(battle, index, s))
+    side.discard.remove(incoming)
+    side.discard.append(outgoing.stack[0])
+    outgoing.stack[0] = incoming
 
 
 def _move_energy(battle, index: int, count: int) -> None:

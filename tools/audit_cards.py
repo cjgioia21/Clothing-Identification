@@ -25,6 +25,7 @@ from pokedeck.decklist import parse_file  # noqa: E402
 from pokedeck.effects import compile_text  # noqa: E402
 from pokedeck.knowledge import Resolution, resolve  # noqa: E402
 from pokedeck.policy import Policy  # noqa: E402
+from pokedeck.pool import load_pool  # noqa: E402
 from pokedeck.scripts import run  # noqa: E402
 
 # Cards whose behaviour lives in the engine rather than in an effect script.
@@ -72,16 +73,38 @@ def staged_battle(resolution: Resolution, deck: BattleDeck) -> Battle:
                 break
             side.deck.remove(spare)
             side.bench_pokemon(spare, 1)
+    pool = load_pool()
+    tool = pool.lookup("Bravery Charm", "PAL", "173")
+    special = pool.lookup("Prism Energy", "ASC", "216")
     for side in battle.sides:
         side.supporter_used = False
         side.energy_attached = 0
         side.stadium_used = False
         side.retreated = False
+        # A knockout last turn, so a card that may only be played after one
+        # is judged on what it does rather than on a condition we forgot.
+        side.lost_on_turn = battle.turn - 1
         if side.active is not None:
             side.active.damage = 30
         for spot in side.in_play():
             spot.turn_played = 1
             spot.ability_used_turn = -1
+            # Energy to move, strip or count, and a Tool to knock off.
+            energy = next((c for c in side.deck if c.category is Category.ENERGY), None)
+            if energy is not None:
+                side.deck.remove(energy)
+                spot.energy.extend([energy, special])
+            if spot.tool is None:
+                spot.tool = tool
+        # Something worth recovering, for the cards that reach into the discard.
+        for wanted in (lambda c: c.category is Category.POKEMON,
+                       lambda c: c.category is Category.ENERGY,
+                       lambda c: c.subtype is Subtype.SUPPORTER,
+                       lambda c: c.subtype is Subtype.ITEM):
+            found = next((c for c in side.deck if wanted(c)), None)
+            if found is not None:
+                side.deck.remove(found)
+                side.discard.append(found)
     return battle
 
 

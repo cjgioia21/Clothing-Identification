@@ -1,0 +1,35 @@
+# Mega Lopunny ex (standard)
+
+Pokémon: 14
+4 Buneary PHF 83
+4 Mega Lopunny ex PHF 84
+2 Latias ex SSP 76
+1 Fezandipiti ex SFA 38
+1 Meowth ex PFO 62
+1 Budew PRE 4
+1 Bloodmoon Ursaluna ex TWM 141
+
+Trainer: 34
+2 Battle Cage PHF 85
+4 Buddy-Buddy Poffin PRE 101
+4 Poké Pad PFO 81
+4 Ultra Ball MEG 131
+4 Lillie's Determination MEG 119
+2 Boss's Orders MEG 114
+2 Night Stretcher SFA 61
+2 Switch PHF 123
+2 Pokégear 3.0 BLK 84
+2 Crispin PRE 105
+1 Judge PFO 76
+1 Eri PRE 136
+1 Xerosic's Machinations SFA 64
+1 Unfair Stamp TWM 165
+1 Energy Search PFO 72
+1 Tool Scrapper WHT 85
+
+Energy: 12
+8 Basic Fighting Energy
+3 Prism Energy BLK 86
+1 Enriching Energy SSP 191
+
+Total Cards: 60

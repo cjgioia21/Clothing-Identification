@@ -74,6 +74,8 @@ _IGNORABLE = (
     r"even if this pok.mon is knocked out",
     r"when you play this pok.mon from your hand to evolve 1 of your pok.mon,? you may use this ability",
     r"if you go first, you can use this attack during your first turn",
+    r"you may discard that card",
+    r"you must play 2 [\w' ]+ cards at once",
 )
 
 _PATTERNS: list[tuple[int, re.Pattern, callable]] = []
@@ -184,7 +186,7 @@ def _accelerate(m):
     return [Effect(op="attach_energy", n=_count(m.group(1)), filter="basic_energy", dest=m.group(2).split()[0])]
 
 
-@_pattern(r"search (?:your|their) deck for (?:up to )?(\d+|a|an|two|three) (basic pok.mon|pok.mon|item|supporter|basic energy|energy)")
+@_pattern(r"search (?:your|their) deck for (?:up to )?(\d+|a|an|two|three) (basic pok.mon|pok.mon|item|supporter|trainer|basic energy|energy)")
 def _search(m):
     targets = {
         "basic pokémon": "basic_pokemon",
@@ -193,6 +195,7 @@ def _search(m):
         "pokemon": "pokemon",
         "item": "item",
         "supporter": "supporter",
+        "trainer": "trainer",
         "basic energy": "basic_energy",
         "energy": "energy",
     }
@@ -595,7 +598,7 @@ def _ability_lock(m):
     return [Effect(op="lock_abilities")]
 
 
-@_pattern(r"you may put (\d+) damage counters? on 1 of your opponent's pok.mon", priority=26)
+@_pattern(r"(?:you may )?put (\d+) damage counters? on 1 of your opponent's pok.mon", priority=26)
 def _place_counters(m):
     return [Effect(op="place_counters", n=int(m.group(1)) * 10)]
 
@@ -625,7 +628,7 @@ def _attack_attach(m):
     return [Effect(op="attach_from_hand", n=1, filter="basic_energy")]
 
 
-@_pattern(r"once during your turn,? you may move a basic energy from 1 of your pok.mon to another", priority=26)
+@_pattern(r"move (?:a|1) basic energy from 1 of your pok.mon to another", priority=26)
 def _move_energy(m):
     return [Effect(op="move_energy", n=1)]
 
@@ -665,7 +668,7 @@ def _scale_opponent_energy(m):
     return [Effect(op="scale", n=int(m.group(1)), filter="opponent_team_energy")]
 
 
-@_pattern(r"discard an energy from your opponent's active pok.mon", priority=26)
+@_pattern(r"discard an energy from (?:your opponent's active pok.mon|1 of your opponent's pok.mon)", priority=26)
 def _strip_energy(m):
     return [Effect(op="discard_energy_target", n=1)]
 
@@ -898,6 +901,42 @@ def _turn_ends(m):
 @_pattern(r"you can use this attack only if you go second,? and only during your first turn", priority=30)
 def _second_turn_only(m):
     return [Effect(op="requires_opening_turn")]
+
+
+@_pattern(r"discard a special energy from 1 of your opponent's pok.mon", priority=31)
+def _enhanced_hammer(m):
+    return [Effect(op="discard_energy_target", n=1, filter="special_energy")]
+
+
+@_pattern(r"choose up to (\d+) pok.mon tools? attached to pok.mon[^.]*and discard them", priority=31)
+def _tool_scrapper(m):
+    return [Effect(op="discard_tools", n=int(m.group(1)), dest="either")]
+
+
+@_pattern(r"search your deck for a card that evolves from this pok.mon and put it onto this pok.mon", priority=31)
+def _ascension(m):
+    return [Effect(op="evolve_from_deck")]
+
+
+@_pattern(r"^look at the top card of your deck", priority=31)
+def _sift_top(m):
+    return [Effect(op="sift", n=1)]
+
+
+@_pattern(r"if the [\w' ]*pok.mon this card is attached to is knocked out[^.]*takes? (\d+) fewer prize", priority=31)
+def _prize_shield(m):
+    return [Effect(op="prize_reduction", n=int(m.group(1)))]
+
+
+@_pattern(r"put (\d+) damage counters? on your active pok.mon", priority=32)
+def _self_counters(m):
+    return [Effect(op="self_counters", n=int(m.group(1)) * 10)]
+
+
+@_pattern(r"choose a basic pok.mon in your discard pile and switch it with 1 of your basic pok.mon in play", priority=31)
+def _transformation(m):
+    return [Effect(op="discard_from_hand", n=1, filter="self"),
+            Effect(op="swap_from_discard")]
 
 
 @_pattern(r"once during your turn,? if this pok.mon has any energy attached,? you may use this ability", priority=28)

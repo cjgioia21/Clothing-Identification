@@ -1,0 +1,33 @@
+# N's Zoroark ex (techy)
+
+Pokémon: 18
+4 N's Zorua JTG 97
+4 N's Zoroark ex JTG 98
+2 N's Zekrom MEP 31
+2 Munkidori PRE 44
+1 Pecharunt ex SFA 39
+1 Fezandipiti ex SFA 38
+1 Yveltal SFA 35
+1 N's Darumaka JTG 26
+1 N's Darmanitan JTG 27
+1 Budew PRE 4
+
+Trainer: 34
+3 N's PP Up JTG 153
+2 Transformation Tome CHR 83
+2 N's Castle JTG 152
+4 Buddy-Buddy Poffin PRE 101
+4 Poké Pad PFO 81
+3 Ultra Ball MEG 131
+3 Lillie's Determination MEG 119
+4 Crushing Hammer PFO 71
+2 Xerosic's Machinations SFA 64
+2 Eri PRE 136
+2 Boss's Orders MEG 114
+2 Night Stretcher SFA 61
+1 Switch PHF 123
+
+Energy: 8
+8 Basic Darkness Energy
+
+Total Cards: 60
