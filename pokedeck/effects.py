@@ -36,6 +36,12 @@ _IGNORABLE = (
     r"if you do, the new active pok.mon is now poisoned",
     r"put the other card on the bottom of your deck",
     r"attach the other to 1 of your pok.mon",
+    r"isn't affected by resistance",
+    r"once during your turn, you may use this ability",
+    r"your opponent reveals their hand",
+    r"put this pok.mon into play only with the effect",
+    r"takes? 1 fewer prize card",
+    r"in any order",
     r"you may discard a stadium in play",
     r"can't retreat",
     r"this attack can be used even if this pok.mon is on the bench",
@@ -620,6 +626,41 @@ def _cheaper_per_prize(m):
 @_pattern(r"once during your turn,? you may switch 1 of your benched (?:\{?\w+\}? )?pok.mon[^.]*with your active pok.mon", priority=26)
 def _ability_switch(m):
     return [Effect(op="switch_self")]
+
+
+@_pattern(r"search (?:your|their) deck for (\d+) cards,? shuffle your deck,? then put those cards on top", priority=27)
+def _codebreaking(m):
+    return [Effect(op="search", n=int(m.group(1)), filter="any", dest="top")]
+
+
+@_pattern(r"this attack does (\d+) damage for each damage counter on this pok.mon", priority=26)
+def _scale_own_counters(m):
+    return [Effect(op="scale", n=int(m.group(1)), filter="damage_counters_on_self")]
+
+
+@_pattern(r"this attack does (\d+) damage for each energy attached to all of your opponent's pok.mon", priority=26)
+def _scale_opponent_energy(m):
+    return [Effect(op="scale", n=int(m.group(1)), filter="opponent_team_energy")]
+
+
+@_pattern(r"discard an energy from your opponent's active pok.mon", priority=26)
+def _strip_energy(m):
+    return [Effect(op="discard_energy_target", n=1)]
+
+
+@_pattern(r"if your opponent's active pok.mon is a pok.mon ex,? this attack does (\d+) more damage", priority=27)
+def _bonus_vs_ex(m):
+    return [Effect(op="bonus_vs_rule_box", n=int(m.group(1)))]
+
+
+@_pattern(r"heal (\d+) damage from each of your benched pok.mon", priority=26)
+def _heal_bench(m):
+    return [Effect(op="heal_bench", n=int(m.group(1)))]
+
+
+@_pattern(r"if your opponent's basic pok.mon is knocked out by damage from an attack used by this pok.mon,? take (\d+) more prize", priority=26)
+def _extra_prize(m):
+    return [Effect(op="extra_prize", n=int(m.group(1)), filter="basic_pokemon")]
 
 
 _WORDS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,

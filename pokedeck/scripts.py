@@ -50,6 +50,8 @@ def useful(battle, index: int, effects, spot=None) -> bool:
                 return True
             continue
         if op == "search":
+            if effect.dest == "top" and side.deck:
+                return True
             if battle.policies[index].wants_search(battle, index, effect):
                 return True
             continue
@@ -165,17 +167,22 @@ def _apply(battle, index: int, effect: Effect, spot) -> None:
 
 def _search(battle, index: int, effect: Effect) -> None:
     side = battle.sides[index]
+    found: list[Card] = []
     for _ in range(effect.n):
         card = _search_target(battle, index, effect)
         if card is None:
             break
         side.deck.remove(card)
-        if effect.dest == "bench" and card.is_basic_pokemon and len(side.bench) < 5:
+        if effect.dest == "top":
+            found.append(card)
+        elif effect.dest == "bench" and card.is_basic_pokemon and len(side.bench) < 5:
             side.bench_pokemon(card, battle.turn)
             battle.policies[index].on_bench(battle, index, side.bench[-1])
         else:
             side.hand.append(card)
     side.shuffle(battle.rng)
+    for card in reversed(found):
+        side.deck.insert(0, card)   # "put those cards on top of your deck"
 
 
 def _search_target(battle, index: int, effect: Effect) -> Card | None:

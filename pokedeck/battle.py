@@ -176,6 +176,7 @@ class Side:
     retreated: bool = False
     stadium_used: bool = False
     lost_pokemon: int = 0
+    extra_prizes: int = 0
     items_locked_until: int = -1
     locked_attack: str = ""
     locked_attack_until: int = -1
@@ -223,6 +224,7 @@ class Side:
         clone.retreated = self.retreated
         clone.stadium_used = self.stadium_used
         clone.lost_pokemon = self.lost_pokemon
+        clone.extra_prizes = self.extra_prizes
         clone.items_locked_until = self.items_locked_until
         clone.locked_attack = self.locked_attack
         clone.locked_attack_until = self.locked_attack_until
@@ -536,6 +538,8 @@ class Battle:
                 damage += effect.n
             elif effect.op == "stadium_bonus" and self.stadium is not None:
                 damage += effect.n
+            elif effect.op == "bonus_vs_rule_box" and target.card.rule_box:
+                damage += effect.n
         if attack.scaling == "x":
             damage = attack.damage * max(1, self._scaling_count(attack, side, foe, spot))
         return damage
@@ -576,6 +580,7 @@ class Battle:
             "energy_in_discard": sum(1 for c in side.discard if c.category is Category.ENERGY),
             "team_energy": sum(len(s.energy) for s in side.in_play()),
             "opponent_item_discard": sum(1 for c in foe.discard if c.subtype is Subtype.ITEM),
+            "opponent_team_energy": sum(len(s.energy) for s in foe.in_play()),
         }.get(source, 0)
 
     def apply_attack(self, attacker_index: int, attack: Attack) -> None:
@@ -780,6 +785,14 @@ class Battle:
             self.snipe_many(index, effect.n, int(effect.dest or 1))
         elif op == "discard_energy_scale" and plan:
             self.pay_scaled_discard(index, plan)
+        elif op == "discard_energy_target":
+            for _ in range(min(effect.n, len(target.energy))):
+                foe.discard.append(target.energy.pop())
+        elif op == "heal_bench":
+            for benched in side.bench:
+                benched.damage = max(0, benched.damage - effect.n)
+        elif op == "extra_prize":
+            side.extra_prizes = effect.n
         elif op == "hit_rule_boxes":
             for other in list(foe.in_play()):
                 if other.card.rule_box:
@@ -850,7 +863,8 @@ class Battle:
                 self.note(f"{side.name} {spot.name} is knocked out")
                 side.discard_spot(spot)
                 side.lost_pokemon += 1
-                self.take_prizes(winner, spot.prize_value)
+                bonus = taker.extra_prizes if spot.card.is_basic_pokemon else 0
+                self.take_prizes(winner, spot.prize_value + bonus)
                 if self.finished:
                     return
                 if side.active is None and not self.promote(index):

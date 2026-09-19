@@ -207,12 +207,16 @@ class ChampionPolicy(Policy):
 
     def __init__(self, rollouts: int = 4, width: int = 14, seed: int = 0,
                  tolerance: float = 0.0, depth: int = 2, finalists: int = 5,
-                 finish_turn: bool = False):
+                 finish_turn: bool = False, rollout_policy: Policy | None = None):
         self.rollouts = rollouts
         self.depth = depth
         self.width = width
         self.finalists = finalists
         self.finish_turn = finish_turn
+        # Who plays the rest of the game inside the search. A searching
+        # opponent model was tried here and measured no better than this one,
+        # for many times the cost.
+        self.rollout_policy = rollout_policy or _GREEDY
         self.tolerance = tolerance
         self.rng = random.Random(seed)
 
@@ -269,13 +273,13 @@ class ChampionPolicy(Policy):
         total = 0.0
         for seed in seeds:
             clone = battle.clone(
-                policies=(_ROLLOUT_POLICY, _ROLLOUT_POLICY),
+                policies=(self.rollout_policy, self.rollout_policy),
                 determinize_for=index,
                 seed=seed,
             )
             if action is not None and not apply_action(clone, index, action):
                 return float("-inf")
-            total += _rollout(clone, index, self.depth, self.finish_turn)
+            total += _rollout(clone, index, self.depth, self.finish_turn, self.rollout_policy)
         return total / max(1, self.rollouts)
 
     # ---------------------------------------------------------------- attack
@@ -300,7 +304,7 @@ class ChampionPolicy(Policy):
         total = 0.0
         for seed in seeds:
             clone = battle.clone(
-                policies=(_ROLLOUT_POLICY, _ROLLOUT_POLICY),
+                policies=(self.rollout_policy, self.rollout_policy),
                 determinize_for=index,
                 seed=seed,
             )
@@ -309,28 +313,29 @@ class ChampionPolicy(Policy):
                 if position >= len(attacks):
                     return float("-inf")
                 clone.apply_attack(index, attacks[position])
-            total += _reply(clone, index, self.depth)
+            total += _reply(clone, index, self.depth, self.rollout_policy)
         return total / max(1, self.rollouts)
 
 
-_ROLLOUT_POLICY = Policy()
+_GREEDY = Policy()
 
 
-def _rollout(clone, index: int, depth: int = 1, finish: bool = True) -> float:
+def _rollout(clone, index: int, depth: int = 1, finish: bool = True, player=None) -> float:
     """Play the turn out, let the opponent answer, and score what is left.
 
     With ``finish`` the rest of the turn is played by the greedy policy, which
     is a guess at what this player would do next; without it the action is
     judged on its own, which keeps a card in hand worth something.
     """
+    player = player or _GREEDY
     if finish:
-        _ROLLOUT_POLICY.play_turn(clone, index)
+        player.play_turn(clone, index)
     if not clone.finished and clone.can_attack(index):
-        _ROLLOUT_POLICY.attack(clone, index)
-    return _reply(clone, index, depth)
+        player.attack(clone, index)
+    return _reply(clone, index, depth, player)
 
 
-def _reply(clone, index: int, depth: int = 1) -> float:
+def _reply(clone, index: int, depth: int = 1, player=None) -> float:
     """Play out the opponent's answer — and, at depth 2, our follow-up."""
     if not clone.finished:
         clone.between_turns(index)

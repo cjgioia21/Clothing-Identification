@@ -7,17 +7,45 @@ knockout next turn and survive the reply, then development.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, replace
+
 from .cards import Category
 from .decklist import PRIZE_COUNT
 
 WIN = 10_000.0
-PRIZE = 120.0          # a prize card is the currency of the game
-KO_THREAT = 45.0       # being able to take a knockout next turn
-KO_RISK = 40.0         # the opponent being able to take one
-BOARD = 1.0            # per point of board development
-HAND = 1.0
-DECK_OUT_WATCH = 25          # cards left before running out starts to matter
-DECK_OUT_PANIC = 220.0       # penalty once the deck is empty
+
+
+@dataclass(frozen=True)
+class Weights:
+    """What the position score cares about, and how much.
+
+    Kept in one place so the numbers can be tuned by playing them against each
+    other rather than argued about — see ``tools/tune_scoring.py``.
+    """
+
+    prize: float = 120.0        # a prize card is the currency of the game
+    ko_threat: float = 45.0     # being able to take a knockout next turn
+    ko_risk: float = 40.0       # the opponent being able to take one
+    board: float = 1.0          # per point of board development
+    hand: float = 1.0           # per card in hand over the opponent's
+    survival: float = 1.0       # surviving the swing back
+    endgame: float = 1.0        # how close the prize count is to over
+    liability: float = 1.0      # extra prizes the bench is quietly owing
+    deck_out_watch: int = 25    # cards left before running out starts to matter
+    deck_out_panic: float = 220.0
+
+    def replace(self, **changes) -> "Weights":
+        return replace(self, **changes)
+
+
+WEIGHTS = Weights()
+
+
+def use(weights: Weights) -> Weights:
+    """Swap the live weights, returning the ones that were in place."""
+    global WEIGHTS
+    previous, WEIGHTS = WEIGHTS, weights
+    return previous
 
 
 def evaluate(battle, index: int) -> float:
@@ -30,17 +58,20 @@ def evaluate(battle, index: int) -> float:
     side = battle.sides[index]
     foe = battle.opponent(index)
 
-    score = PRIZE * (side.prizes_taken - foe.prizes_taken)
-    score += BOARD * (board_strength(battle, index) - board_strength(battle, 1 - index))
-    score += HAND * (len(side.hand) - len(foe.hand))
+    weights = WEIGHTS
+    score = weights.prize * (side.prizes_taken - foe.prizes_taken)
+    score += weights.board * (board_strength(battle, index) - board_strength(battle, 1 - index))
+    score += weights.hand * (len(side.hand) - len(foe.hand))
 
-    score += KO_THREAT * knockout_reach(battle, index)
-    score -= KO_RISK * knockout_reach(battle, 1 - index)
+    score += weights.ko_threat * knockout_reach(battle, index)
+    score -= weights.ko_risk * knockout_reach(battle, 1 - index)
 
     score += chip_damage(battle, index) - chip_damage(battle, 1 - index)
-    score += survivability(battle, index) - survivability(battle, 1 - index)
-    score += endgame_pressure(side) - endgame_pressure(foe)
-    score -= prize_liability(battle, index) - prize_liability(battle, 1 - index)
+    score += weights.survival * (survivability(battle, index) - survivability(battle, 1 - index))
+    score += weights.endgame * (endgame_pressure(side) - endgame_pressure(foe))
+    score -= weights.liability * (
+        prize_liability(battle, index) - prize_liability(battle, 1 - index)
+    )
     score -= deck_out_risk(side)
     score += deck_out_risk(foe)
     return score
@@ -134,9 +165,10 @@ def deck_out_risk(side) -> float:
     while the position still looks fine.
     """
     remaining = len(side.deck)
-    if remaining >= DECK_OUT_WATCH:
+    watch = WEIGHTS.deck_out_watch
+    if remaining >= watch:
         return 0.0
-    return DECK_OUT_PANIC * ((DECK_OUT_WATCH - remaining) / DECK_OUT_WATCH) ** 2
+    return WEIGHTS.deck_out_panic * ((watch - remaining) / watch) ** 2
 
 
 def prizes_left(side) -> int:

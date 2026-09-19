@@ -219,6 +219,10 @@ class Policy:
             value -= 6
         if not side.deck:
             value -= 20
+        # Digging while a knockout is already lined up spends a deck to win a
+        # game that is already being won.
+        if len(side.deck) < 20 and len(side.hand) >= 3 and self.can_knock_out(battle, index):
+            value -= 8
         return value
 
     @staticmethod
@@ -388,24 +392,51 @@ class Policy:
         return True
 
     def consider_retreat(self, battle, index: int) -> None:
+        """Retreat when the bench can hit harder than the Active can.
+
+        A starter that pokes for 10 should not keep the Active Spot while the
+        deck's real attacker sits behind it fully charged — that is how a game
+        gets ground out into a deck-out instead of won on prizes.
+        """
         side = battle.sides[index]
         spot = side.active
         if spot is None or side.retreated or not side.bench:
             return
         if spot.condition in ("asleep", "paralyzed"):
             return
-        if any(battle.can_pay(spot, a) for a in spot.card.attacks):
-            return
+
         cost = battle.retreat_cost(index, spot)
         if cost > len(spot.energy):
             return
-        replacement = self.best_bench(battle, index)
-        if not any(battle.can_pay(replacement, a) for a in replacement.card.attacks):
+
+        current = self.reach(battle, index, spot)
+        replacement = max(side.bench, key=lambda other: self.reach(battle, index, other))
+        best = self.reach(battle, index, replacement)
+        if best <= 0:
             return
+        if current > 0 and best < max(current * 1.5, current + 40):
+            return  # the Active is pulling its weight
+
         for _ in range(cost):
             side.discard.append(spot.energy.pop())
         battle.switch_active(index, replacement)
         side.retreated = True
+
+    def reach(self, battle, index: int, spot) -> int:
+        """The most damage this Pokémon could do right now, if it were Active."""
+        foe = battle.opponent(index)
+        target = foe.active
+        if target is None:
+            return 0
+        best = 0
+        for attack in spot.card.attacks:
+            if not battle.can_pay(spot, attack):
+                continue
+            plan = battle.attack_plan(index, attack, spot, target)
+            raw = battle.attack_damage(index, attack, spot, target, plan)
+            ignore = any(e.op == "ignore_weakness" for e in attack.effects)
+            best = max(best, battle.final_damage(raw, spot, target, index, ignore_weakness=ignore))
+        return best
 
     # ----------------------------------------------------------------- attack
     def attack(self, battle, index: int) -> None:
@@ -497,7 +528,21 @@ class Policy:
         side = battle.sides[index]
         if len(side.deck) <= max(6, n + 2):
             return False
-        return len(side.hand) < 6
+        if len(side.hand) >= 6:
+            return False
+        # With a knockout already lined up there is nothing to dig for, and a
+        # deck spent grinding out a game it is winning is a game it can lose.
+        if len(side.deck) < 20 and len(side.hand) >= 3 and self.can_knock_out(battle, index):
+            return False
+        return True
+
+    def can_knock_out(self, battle, index: int) -> bool:
+        """Can this player take a knockout with what is already in play?"""
+        side = battle.sides[index]
+        foe = battle.opponent(index)
+        if side.active is None or foe.active is None:
+            return False
+        return self.reach(battle, index, side.active) >= foe.active.remaining_hp
 
     def energy_shortfall(self, battle, index: int) -> int:
         """How much Energy the board still needs for its best attacks."""
