@@ -11,6 +11,7 @@ import os
 import sys
 from pathlib import Path
 
+from .console import use_utf8
 from .decklist import DecklistError, parse_file, validate
 from .gauntlet import load_field, run_gauntlet
 from .knowledge import resolve
@@ -28,6 +29,7 @@ BANNER = r"""
 
 def main(argv: list[str] | None = None) -> int:
     multiprocessing.freeze_support()  # a packaged .exe re-runs itself for workers
+    use_utf8()
     argv = list(sys.argv[1:] if argv is None else argv)
     print(BANNER)
     path = argv[0] if argv else None

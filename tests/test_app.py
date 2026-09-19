@@ -49,3 +49,24 @@ def test_the_entry_point_routes_a_bare_path_to_the_menu(monkeypatch, capsys):
     feed(monkeypatch, ["7"])
     assert entry_main(["examples/dragapult.txt"]) == 0
     assert "Loaded dragapult.txt" in capsys.readouterr().out
+
+
+def test_utf8_output_is_forced_for_the_console(capsys):
+    from pokedeck.console import use_utf8
+
+    use_utf8()  # must not raise, even with pytest's captured streams
+    print("Pokémon — Neutralization Zone ×2")
+    assert "Pokémon" in capsys.readouterr().out
+
+
+def test_utf8_setup_survives_a_stream_that_cannot_reconfigure(monkeypatch):
+    import sys
+
+    from pokedeck.console import use_utf8
+
+    class Stubborn:
+        def reconfigure(self, **kwargs):
+            raise ValueError("no")
+
+    monkeypatch.setattr(sys, "stdout", Stubborn())
+    use_utf8()

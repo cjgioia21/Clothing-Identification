@@ -10,6 +10,7 @@ import sys
 from dataclasses import asdict
 
 from .cards import Category, Deck, Stage
+from .console import use_utf8
 from .decklist import DecklistError, parse_file, validate
 from .engine import IN_PLAY_PREFIX, Config, play_game
 from .knowledge import Resolution, load_overrides, resolve
@@ -28,6 +29,7 @@ from .simulate import run
 
 
 def main(argv: list[str] | None = None) -> int:
+    use_utf8()
     parser = _build_parser()
     args = parser.parse_args(argv)
     try:
