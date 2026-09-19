@@ -27,20 +27,19 @@ matchup is scored from both sides of the coin flip.
 $ pokedeck gauntlet examples/dragapult.txt -n 10 --rows 6
 examples/dragapult.txt vs the gauntlet — 100 decks × 10 games (1000 games, champion player)
 
-  record            680-320-0   (68.0% ±2.9%)
-  going first        67.0%   (500 games)
-  going second       69.0%   (500 games)
-  prize margin      +2.25 per game   (4.08 taken, 1.83 given)
-  game length       8.9 turns each
-  decided by        prizes 70%, deck-out 16%, bench-out 14%
-  card text modelled  96.0%
-  partly modelled:      Lucian
+  record            673-327-0   (67.3% ±2.9%)
+  going first        69.4%   (500 games)
+  going second       65.2%   (500 games)
+  prize margin      +1.45 per game   (4.12 taken, 2.68 given)
+  game length       9.0 turns each
+  decided by        prizes 78%, bench-out 16%, deck-out 5%
+  card text modelled 100.0%
 
 Worst 6 matchups
   win%   matchup                            record    prizes  turns
-    0.0%  Archaludon ex (standard)           0-10-0   -4.6    9.7
-   20.0%  Palafin ex (aggro)                 2-8-0   -1.5   10.3
-   30.0%  Mega Lucario ex (techy)            3-7-0   -2.7    9.3
+    0.0%  Palafin ex (aggro)                 0-10-0   -4.4    8.8
+   30.0%  Palafin ex (techy)                 3-7-0   -2.0    7.2
+   30.0%  Dragapult ex (standard)            3-7-0   -1.9    6.6
    ...
 ```
 
