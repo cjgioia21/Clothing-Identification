@@ -27,19 +27,19 @@ matchup is scored from both sides of the coin flip.
 $ pokedeck gauntlet examples/dragapult.txt -n 10 --rows 6
 examples/dragapult.txt vs the gauntlet — 100 decks × 10 games (1000 games, champion player)
 
-  record            654-344-2   (65.4% ±2.9%)
-  going first        65.4%   (500 games)
-  going second       65.4%   (500 games)
-  prize margin      +1.41 per game   (4.03 taken, 2.62 given)
+  record            632-368-0   (63.2% ±3.0%)
+  going first        66.6%   (500 games)
+  going second       59.8%   (500 games)
+  prize margin      +1.30 per game   (3.99 taken, 2.69 given)
   game length       8.9 turns each
-  decided by        prizes 76%, bench-out 17%, deck-out 7%
+  decided by        prizes 80%, bench-out 16%, deck-out 4%
   card text modelled 100.0%
 
 Worst 6 matchups
-  win%   matchup                            record    prizes  turns
-   10.0%  Dragapult ex (standard)            1-9-0   -3.1    6.1
-   10.0%  Archaludon ex (standard)           1-9-0   -2.6    8.0
-   20.0%  Terapagos ex (grind)               2-8-0   -2.7    7.2
+  win%   matchup                             record    prizes  turns
+    0.0%  Mega Sharpedo ex (aggro)            0-10-0   -4.0    8.8
+   10.0%  Mega Lopunny ex (techy)             1-9-0   -4.2    7.9
+   20.0%  Mega Lucario ex (techy)             2-8-0   -2.9    9.4
    ...
 ```
 
@@ -58,13 +58,18 @@ test. Flags: `-n` games per opponent, `--decks N` to cut the field down,
 `--json`.
 
 The field lives in `pokedeck/data/gauntlet/` as 100 readable decklists — 25
-archetypes (Dragapult ex, Hydreigon ex, Mega Lucario ex, Mega Dragonite ex,
-Cynthia's Garchomp ex, Raging Bolt ex, Miraidon ex, Terapagos ex, Steven's
-Metagross ex, …) in four variants each: `standard`, `aggro`, `techy` and
-`grind`. The builder picks the newest legal print of every card, derives the
-Energy from what the attacker's own attack costs, keeps each list to one ACE
-SPEC, and refuses to write a deck that fails the construction or format check.
-Rebuild or edit the field with `python tools/build_gauntlet.py`.
+archetypes (Dragapult ex, Mega Lucario ex, Mega Lopunny ex, Mega Sharpedo ex,
+N's Zoroark ex, Raging Bolt ex, Team Rocket's Mewtwo ex, Toxtricity Sinister
+Surge, Hydrapple ex, …) in four variants each: `standard`, `aggro`, `techy`
+and `grind`. Every one passes the construction and format checks.
+
+Two ways to change it. `python tools/import_gauntlet.py gauntlet.docx` reads a
+written list of decks and writes the field from it, resolving each card name to
+a Standard-legal print and pinning that print into the decklist so the field is
+reproducible; `--check` reports what it would write without writing it. Or
+`python tools/build_gauntlet.py` generates a field from the card pool instead,
+deriving each deck's Energy from what its attacker's attack actually costs.
+Either way you can edit the files by hand — they are plain PTCG Live lists.
 
 ## What the battle engine models
 
@@ -175,18 +180,20 @@ understands the card text the compiler could read. It plays a clean, tactical
 game and it does not misplay the obvious things — that is the honest ceiling
 here.
 
-Across the hundred field decks, **100% of distinct cards are fully modelled** —
-every line of their printed text turned into rules, checked by
-`tools/audit_cards.py`, which puts each card into a controlled game, uses it,
-and reports anything that changed nothing. Pool-wide, 61% of Standard-legal
-cards read end to end; the rest is reported, never guessed at.
+Across the hundred field decks, **96% of the 137 distinct cards do everything
+they print, 2% most of it, and 1% nothing** — checked by `tools/audit_cards.py`,
+which puts each card into a controlled game, uses it, and reports anything that
+changed nothing. Pool-wide, 61% of Standard-legal cards read end to end; the
+rest is reported, never guessed at.
 
 **Not modelled:** the Lost Zone, attack choices that depend on reading the
-opponent, Tera Pokémon (TCGdex carries no Tera marking, so a shield printed
-against them matches nothing), and any text the compiler could not parse.
-Nothing is silently invented: an unreadable rider just does not fire, and the
-coverage line in every report tells you how much of your deck was taken
-literally.
+opponent, Tera Pokémon (TCGdex publishes no Tera marking, so the three cards
+that key off Tera match nothing), Dipplin's attack-twice combo, and any text
+the compiler could not parse. `Mysterious Rock Inn` is named in four field
+lists and exists in neither the bundled pool nor TCGdex, so those four decks
+play it as a blank rather than have a card invented for them. Nothing is
+silently substituted: an unreadable rider just does not fire, and the coverage
+line in every report tells you how much of your deck was taken literally.
 
 ```
   card text modelled  95.0%
