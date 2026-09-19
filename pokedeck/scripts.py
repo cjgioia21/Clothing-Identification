@@ -23,17 +23,26 @@ def matches(card: Card, filter_: str) -> bool:
     return MATCHERS.get(filter_, lambda c: False)(card)
 
 
-def gated(effects, spot) -> bool:
+def costs_the_turn(effects) -> bool:
+    """Does this script hand the turn over the moment it resolves?"""
+    return any(e.op == "end_turn" for e in effects)
+
+
+def gated(battle, index: int, effects, spot) -> bool:
     """Is a condition printed on the card not met right now?"""
     for effect in effects:
         if effect.op == "requires_energy" and not (spot and spot.energy):
             return True
+        if effect.op == "requires_knockout":
+            side = battle.sides[index]
+            if side.lost_on_turn < battle.turn - 1:
+                return True
     return False
 
 
 def run(battle, index: int, effects, spot=None) -> None:
     """Apply an effect script for the player at ``index``."""
-    if gated(effects, spot):
+    if gated(battle, index, effects, spot):
         return
     for effect in effects:
         if effect.chance < 100 and battle.rng.randrange(100) >= effect.chance:
@@ -43,10 +52,12 @@ def run(battle, index: int, effects, spot=None) -> None:
 
 def useful(battle, index: int, effects, spot=None) -> bool:
     """Would this script do anything right now?"""
-    if gated(effects, spot):
+    if gated(battle, index, effects, spot):
         return False
     side = battle.sides[index]
     policy = battle.policies[index]
+    if costs_the_turn(effects) and policy.can_knock_out(battle, index):
+        return False  # never trade an attack away for a search
     for effect in effects:
         op = effect.op
         if op in ("draw", "shuffle_hand_into_deck", "discard_hand"):
@@ -98,6 +109,12 @@ def useful(battle, index: int, effects, spot=None) -> bool:
             return True
         if op == "ko_self":
             continue  # never the reason to use an Ability, only its price
+        if op == "stamp" and len(battle.opponent(index).hand) > int(effect.dest or 0):
+            return True
+        if op == "self_mill" and side.deck:
+            return True
+        if op == "mill" and battle.opponent(index).deck:
+            return True
         if op == "opponent_discard_to" and len(battle.opponent(index).hand) > effect.n:
             return True
         if op == "opponent_discard_filter" and any(
@@ -131,6 +148,22 @@ def _apply(battle, index: int, effect: Effect, spot) -> None:
         for card in pick_discards(battle, index, effect.n):
             side.hand.remove(card)
             side.discard.append(card)
+    elif op == "stamp":
+        foe = battle.opponent(index)
+        for player, count in ((side, effect.n), (foe, int(effect.dest or 0))):
+            player.deck.extend(player.hand)
+            player.hand = []
+            player.shuffle(battle.rng)
+            player.draw(count)
+    elif op == "self_mill":
+        for _ in range(min(effect.n, len(side.deck))):
+            side.discard.append(side.deck.pop(0))
+    elif op == "mill":
+        foe = battle.opponent(index)
+        for _ in range(min(effect.n, len(foe.deck))):
+            foe.discard.append(foe.deck.pop(0))
+    elif op == "end_turn":
+        side.turn_over = True
     elif op == "search":
         _search(battle, index, effect)
     elif op == "recover":
@@ -177,9 +210,16 @@ def _apply(battle, index: int, effect: Effect, spot) -> None:
         _move_damage(battle, index, effect.n)
     elif op == "heal_team":
         hurt = [s for s in side.in_play() if s.damage]
-        if hurt:
+        if not hurt:
+            pass
+        elif effect.n >= 999:
+            for spot_ in hurt:
+                spot_.damage = 0
+        else:
             worst = max(hurt, key=lambda s: s.damage)
             worst.damage = max(0, worst.damage - effect.n)
+    elif op == "heal_self" and spot is not None:
+        spot.damage = 0 if effect.n >= 999 else max(0, spot.damage - effect.n)
 
 
 def _search(battle, index: int, effect: Effect) -> None:
@@ -275,11 +315,15 @@ def _place_counters(battle, index: int, effect: Effect) -> None:
     targets = [foe.active] if effect.dest == "active" and foe.active else foe.in_play()
     if not targets:
         return
-    finishable = [s for s in targets if 0 < s.remaining_hp <= effect.n]
-    target = max(finishable, key=lambda s: s.prize_value) if finishable else max(
-        targets, key=lambda s: (s.prize_value, -s.remaining_hp)
-    )
-    battle.damage_spot(1 - index, target, effect.n, source="damage counters")
+    wanted = int(effect.dest.split(":", 1)[1]) if effect.dest.startswith("many:") else 1
+    remaining = list(targets)
+    for _ in range(min(wanted, len(remaining))):
+        finishable = [s for s in remaining if 0 < s.remaining_hp <= effect.n]
+        pick = max(finishable, key=lambda s: s.prize_value) if finishable else max(
+            remaining, key=lambda s: (s.prize_value, -s.remaining_hp)
+        )
+        remaining.remove(pick)
+        battle.damage_spot(1 - index, pick, effect.n, source="damage counters")
 
 
 def _move_energy(battle, index: int, count: int) -> None:

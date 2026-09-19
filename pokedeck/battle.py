@@ -193,6 +193,8 @@ class Side:
     retreated: bool = False
     stadium_used: bool = False
     lost_pokemon: int = 0
+    lost_on_turn: int = -1
+    turn_over: bool = False
     extra_prizes: int = 0
     items_locked_until: int = -1
     trainer_tax_until: int = -1
@@ -243,6 +245,8 @@ class Side:
         clone.retreated = self.retreated
         clone.stadium_used = self.stadium_used
         clone.lost_pokemon = self.lost_pokemon
+        clone.lost_on_turn = self.lost_on_turn
+        clone.turn_over = self.turn_over
         clone.extra_prizes = self.extra_prizes
         clone.items_locked_until = self.items_locked_until
         clone.trainer_tax_until = self.trainer_tax_until
@@ -433,6 +437,7 @@ class Battle:
         side = self.sides[index]
         side.supporter_used = False
         side.energy_attached = 0
+        side.turn_over = False
         side.retreated = False
         side.stadium_used = False
 
@@ -446,7 +451,7 @@ class Battle:
         policy.play_turn(self, index)
         if self.finished:
             return
-        if self.can_attack(index):
+        if not side.turn_over and self.can_attack(index):
             policy.attack(self, index)
         self.discard_spent_energy(index)
 
@@ -575,10 +580,22 @@ class Battle:
         side = self.sides[attacker_index]
         foe = self.opponent(attacker_index)
 
+        self._attacking_cost = attack.cost
         if any(e.op == "requires_stadium" for e in attack.effects) and self.stadium is None:
             return 0
-        coins = next((e.n for e in attack.effects if e.op == "coins"), 0)
-        self._heads_flipped = sum(1 for _ in range(coins) if self.flip()) if coins else 0
+        for effect in attack.effects:
+            if effect.op == "requires_opening_turn" and not (
+                self.turn <= 2 and attacker_index != self.first
+            ):
+                return 0
+            if effect.op == "requires_status":
+                afflicted = target.condition == effect.filter or (
+                    effect.filter == "poisoned" and target.poisoned) or (
+                    effect.filter == "burned" and target.burned)
+                if not afflicted:
+                    return 0
+        coin = next((e for e in attack.effects if e.op == "coins"), None)
+        self._heads_flipped = self._flip_coins(coin, spot) if coin is not None else 0
 
         if "discard_k" in plan:
             scaled = plan["per"] * plan["discard_k"]
@@ -597,11 +614,26 @@ class Battle:
                 damage += effect.n
             elif effect.op == "bonus_vs_rule_box" and target.card.rule_box:
                 damage += effect.n
+            elif effect.op == "bonus_if" and self._condition_met(effect.filter, side, spot, target):
+                damage += effect.n
+            elif effect.op == "penalty_per":
+                damage -= effect.n * self._counter(effect.filter, side, foe, spot)
+        damage = max(0, damage)
         if attack.scaling == "x":
             damage = attack.damage * max(1, self._scaling_count(attack, side, foe, spot))
         return damage
 
     _heads_flipped = 0
+
+    def _flip_coins(self, effect: Effect, spot: Spot | None = None) -> int:
+        """A fixed number of coins, one per Energy, or "until you get tails"."""
+        if effect.filter == "until_tails":
+            heads = 0
+            while self.flip() and heads < 20:   # bounded, but only in the far tail
+                heads += 1
+            return heads
+        count = len(spot.energy) if effect.filter == "own_energy" and spot else effect.n
+        return sum(1 for _ in range(count) if self.flip())
 
     def _scaling_count(self, attack: Attack, side: Side, foe: Side, spot: Spot) -> int:
         """How many times a printed "30×" attack multiplies."""
@@ -617,6 +649,22 @@ class Battle:
         if "heads" in text:
             return sum(1 for _ in range(4) if self.flip())
         return 1
+
+    def _condition_met(self, kind: str, side: Side, spot: Spot, target: Spot) -> bool:
+        """The "if ..." half of a rider the compiler read off the card."""
+        if kind == "target_damaged":
+            return bool(target.damage)
+        if kind == "target_afflicted":
+            return bool(target.condition or target.poisoned or target.burned)
+        if kind == "lost_a_pokemon":
+            return side.lost_on_turn >= self.turn - 1
+        if kind.startswith("spare_energy:"):
+            spare = int(kind.split(":", 1)[1])
+            cost = len(self._attacking_cost or ())
+            return len(spot.energy_units()) >= cost + spare
+        return False
+
+    _attacking_cost: tuple = ()
 
     def _counter(self, source: str, side: Side, foe: Side, spot: Spot) -> int:
         if source == "heads":
@@ -638,6 +686,9 @@ class Battle:
             "team_energy": sum(len(s.energy) for s in side.in_play()),
             "opponent_item_discard": sum(1 for c in foe.discard if c.subtype is Subtype.ITEM),
             "opponent_team_energy": sum(len(s.energy) for s in foe.in_play()),
+            "damage_counters_on_target": (foe.active.damage // 10) if foe.active else 0,
+            "target_energy": len(foe.active.energy) if foe.active else 0,
+            "own_in_play": len(side.in_play()),
         }.get(source, 0)
 
     def apply_attack(self, attacker_index: int, attack: Attack) -> None:
@@ -659,17 +710,62 @@ class Battle:
         if self.attack_blocked(attacker_index, attack):
             return
 
+        for effect in attack.effects:
+            if effect.op == "strip_attachments":
+                self._strip(attacker_index, target, effect.filter)
+
         plan = self.attack_plan(attacker_index, attack, spot, target)
         raw = self.attack_damage(attacker_index, attack, spot, target, plan)
         ignore = any(e.op == "ignore_weakness" for e in attack.effects)
-        dealt = self.final_damage(raw, spot, target, attacker_index, ignore_weakness=ignore)
+        blind = any(e.op == "ignore_defences" for e in attack.effects)
+        dealt = self.final_damage(raw, spot, target, attacker_index,
+                                  ignore_weakness=ignore, ignore_defences=blind)
+        if dealt and self._dodges(target):
+            self.note(f"{foe.name} {target.name} shrugs off {attack.name}")
+            dealt = 0
         self.note(f"{side.name} {spot.name} uses {attack.name} for {dealt}")
         if dealt:
             self.damage_spot(1 - attacker_index, target, dealt, source=attack.name)
+            self._retaliate(attacker_index, spot, target)
+        self._dealt = dealt
 
         for effect in attack.effects:
             self.apply_attack_effect(attacker_index, effect, spot, target, plan)
         self.check_knockouts()
+
+    _dealt = 0
+
+    def _dodges(self, target: Spot) -> bool:
+        """Kecleon and friends: a coin flip that turns the hit into nothing."""
+        for effect in target.card.ability:
+            if effect.op == "dodge" and self.flip():
+                return True
+        return False
+
+    def _retaliate(self, index: int, spot: Spot, target: Spot) -> None:
+        """Roserade's thorns: the attacker walks away with a Special Condition."""
+        for effect in target.card.ability:
+            if effect.op != "retaliate_status":
+                continue
+            if effect.filter == "poisoned":
+                spot.poisoned = True
+            elif effect.filter == "burned":
+                spot.burned = True
+            elif effect.filter in SPECIAL_CONDITIONS:
+                spot.condition = effect.filter
+                spot.condition_turn = self.turn
+
+    def _strip(self, index: int, target: Spot, kind: str) -> None:
+        """Knock the Tool (and sometimes the Special Energy) off the defender."""
+        foe = self.opponent(index)
+        if target.tool is not None:
+            foe.discard.append(target.tool)
+            target.tool = None
+        if kind != "tool_and_energy":
+            return
+        keep = [c for c in target.energy if c.subtype is not Subtype.SPECIAL_ENERGY]
+        foe.discard.extend(c for c in target.energy if c.subtype is Subtype.SPECIAL_ENERGY)
+        target.energy = keep
 
     def team_passives(self, index: int, op: str):
         """Passive Ability effects from every Pokémon that player has in play."""
@@ -798,6 +894,7 @@ class Battle:
         target: Spot,
         index: int | None = None,
         ignore_weakness: bool = False,
+        ignore_defences: bool = False,
     ) -> int:
         """Work the damage out in the printed order.
 
@@ -806,11 +903,11 @@ class Battle:
         """
         if raw <= 0:
             return 0
-        if self.sheltered(spot, target):
+        if self.sheltered(spot, target) and not ignore_defences:
             return 0
         if index is None:
             index = 0 if spot in self.sides[0].in_play() else 1
-        if self.immune(target, spot, 1 - index):
+        if self.immune(target, spot, 1 - index) and not ignore_defences:
             return 0
 
         damage = raw + self.damage_boost(index, spot, target)
@@ -820,9 +917,10 @@ class Battle:
                 damage *= 2
             if target.card.resistance and target.card.resistance in spot.card.types:
                 damage -= target.card.resistance_value
-        damage -= self.damage_reduction(1 - index, target, spot)
-        if target.shield and target.shield_until >= self.turn:
-            damage -= target.shield
+        if not ignore_defences:
+            damage -= self.damage_reduction(1 - index, target, spot)
+            if target.shield and target.shield_until >= self.turn:
+                damage -= target.shield
         return max(0, damage)
 
     def apply_attack_effect(
@@ -838,13 +936,14 @@ class Battle:
             pick = max(foe.bench, key=lambda s: (s.remaining_hp <= effect.n, s.prize_value))
             self.damage_spot(1 - index, pick, effect.n, source="snipe")
         elif op == "status":
+            who = spot if effect.dest == "self" else target
             if effect.filter in SPECIAL_CONDITIONS:
-                target.condition = effect.filter
-                target.condition_turn = self.turn
+                who.condition = effect.filter
+                who.condition_turn = self.turn
             elif effect.filter == "poisoned":
-                target.poisoned = True
+                who.poisoned = True
             elif effect.filter == "burned":
-                target.burned = True
+                who.burned = True
         elif op == "discard_energy_self":
             for _ in range(min(effect.n, len(spot.energy))):
                 side.discard.append(spot.energy.pop())
@@ -889,6 +988,26 @@ class Battle:
             for other in list(foe.in_play()):
                 if other.card.rule_box:
                     self.damage_spot(1 - index, other, effect.n, source="spread")
+        elif op == "end_turn":
+            side.turn_over = True
+        elif op == "self_mill":
+            for _ in range(min(effect.n, len(side.deck))):
+                side.discard.append(side.deck.pop(0))
+        elif op == "energy_to_hand" and spot.energy:
+            side.hand.append(spot.energy.pop())
+        elif op == "mill":
+            count = self._heads_flipped if effect.filter == "heads" else effect.n
+            for _ in range(min(count, len(foe.deck))):
+                foe.discard.append(foe.deck.pop(0))
+        elif op == "heal_dealt":
+            spot.damage = max(0, spot.damage - self._dealt)
+        elif op == "block_target":
+            target.blocked_until = self.turn + 1
+        elif op == "discard_stadium" and self.stadium is not None:
+            if self.stadium_owner is not None:
+                self.sides[self.stadium_owner].discard.append(self.stadium)
+            self.stadium = None
+            self.stadium_owner = None
         elif op == "lock_items":
             foe.items_locked_until = self.turn + 1
         elif op == "tax_trainers":
@@ -958,6 +1077,7 @@ class Battle:
                 self.note(f"{side.name} {spot.name} is knocked out")
                 side.discard_spot(spot)
                 side.lost_pokemon += 1
+                side.lost_on_turn = self.turn
                 bonus = taker.extra_prizes if spot.card.is_basic_pokemon else 0
                 self.take_prizes(winner, spot.prize_value + bonus)
                 if self.finished:

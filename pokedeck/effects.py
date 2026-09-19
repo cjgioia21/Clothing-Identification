@@ -65,6 +65,15 @@ _IGNORABLE = (
     r"that player shuffles their deck",
     r"if this card is attached to (?:1 of your|an? [\w ]+?) pok.mon",
     r"^\(.*\)$",
+    r"^\(",
+    r"existing effects are not removed",
+    r"damage is not an effect",
+    r"your opponent chooses the new active pok.mon",
+    r"any attached cards, damage counters, special conditions, turns in play",
+    r"shuffle the other cards and put them on the bottom of your deck",
+    r"even if this pok.mon is knocked out",
+    r"when you play this pok.mon from your hand to evolve 1 of your pok.mon,? you may use this ability",
+    r"if you go first, you can use this attack during your first turn",
 )
 
 _PATTERNS: list[tuple[int, re.Pattern, callable]] = []
@@ -150,7 +159,7 @@ def _switch_self(m):
     return [Effect(op="switch_self")]
 
 
-@_pattern(r"switch (?:in )?(?:1|one) of your opponent's benched pok.mon (?:with|to)")
+@_pattern(r"switch (?:in )?(?:1|one) of your opponent's benched pok.mon")
 def _gust(m):
     return [Effect(op="switch_opponent")]
 
@@ -499,7 +508,7 @@ def _needs_stadium(m):
     return [Effect(op="requires_stadium")]
 
 
-@_pattern(r"this attack's damage isn't affected by weakness or resistance", priority=25)
+@_pattern(r"this attack's damage isn't affected by weakness", priority=25)
 def _ignores_weakness(m):
     return [Effect(op="ignore_weakness")]
 
@@ -586,7 +595,7 @@ def _ability_lock(m):
     return [Effect(op="lock_abilities")]
 
 
-@_pattern(r"once during your turn,? you may put (\d+) damage counters on 1 of your opponent's pok.mon", priority=26)
+@_pattern(r"you may put (\d+) damage counters? on 1 of your opponent's pok.mon", priority=26)
 def _place_counters(m):
     return [Effect(op="place_counters", n=int(m.group(1)) * 10)]
 
@@ -674,6 +683,221 @@ def _heal_bench(m):
 @_pattern(r"if your opponent's basic pok.mon is knocked out by damage from an attack used by this pok.mon,? take (\d+) more prize", priority=26)
 def _extra_prize(m):
     return [Effect(op="extra_prize", n=int(m.group(1)), filter="basic_pokemon")]
+
+
+# -------------------------------------------------- the long tail of printed text
+@_pattern(r"flip a coin until you get tails", priority=28)
+def _flip_until_tails(m):
+    """An open-ended flip: heads half the time, so one head on average."""
+    return [Effect(op="coins", n=0, filter="until_tails")]
+
+
+@_pattern(r"^if heads,? this attack does (\d+) more damage", priority=28)
+def _plain_coin_bonus(m):
+    return [Effect(op="coin_bonus", n=int(m.group(1)))]
+
+
+@_pattern(r"this attack does (\d+) more damage for each heads", priority=28)
+def _bonus_per_heads(m):
+    return [Effect(op="bonus_per", n=int(m.group(1)), filter="heads")]
+
+
+@_pattern(r"(?:this attack's )?damage(?: from attacks used by this pok.mon)? isn't affected by any effects on your opponent's active pok.mon", priority=28)
+def _ignore_defensive_effects(m):
+    return [Effect(op="ignore_defences")]
+
+
+@_pattern(r"switch out your opponent's active pok.mon to the bench", priority=28)
+def _switch_out_opponent(m):
+    return [Effect(op="switch_opponent")]
+
+
+@_pattern(r"discard the top (\d+|card) (?:cards? )?of your opponent's deck", priority=28)
+def _mill(m):
+    token = m.group(1)
+    return [Effect(op="mill", n=1 if token == "card" else int(token))]
+
+
+@_pattern(r"for each heads,? discard the top card of your opponent's deck", priority=29)
+def _mill_per_heads(m):
+    return [Effect(op="mill", n=0, filter="heads")]
+
+
+@_pattern(r"if your opponent's active pok.mon already has any damage counters on it,? this attack does (\d+) more damage", priority=28)
+def _bonus_vs_damaged(m):
+    return [Effect(op="bonus_if", n=int(m.group(1)), filter="target_damaged")]
+
+
+@_pattern(r"before doing damage,? discard all pok.mon tools?(?: and special energy)? from your opponent's active pok.mon", priority=28)
+def _strip_tools(m):
+    special = "special energy" in m.group(0).lower()
+    return [Effect(op="strip_attachments", filter="tool_and_energy" if special else "tool")]
+
+
+@_pattern(r"during your opponent's next turn,? the defending pok.mon can't use attacks", priority=28)
+def _defender_cannot_attack(m):
+    return [Effect(op="block_target")]
+
+
+@_pattern(r"heal from this pok.mon the same amount of damage you did to your opponent's active pok.mon", priority=28)
+def _drain(m):
+    return [Effect(op="heal_dealt")]
+
+
+@_pattern(r"this attack does (\d+) less damage for each damage counter on this pok.mon", priority=28)
+def _fade_with_damage(m):
+    return [Effect(op="penalty_per", n=int(m.group(1)), filter="damage_counters_on_self")]
+
+
+@_pattern(r"this attack does (\d+) damage for each damage counter on your opponent's active pok.mon", priority=28)
+def _scale_target_counters(m):
+    return [Effect(op="scale", n=int(m.group(1)), filter="damage_counters_on_target")]
+
+
+@_pattern(r"(?:then,? )?discard (?:a|that) stadium(?: in play)?", priority=28)
+def _discard_stadium(m):
+    return [Effect(op="discard_stadium")]
+
+
+@_pattern(r"^this pok.mon is now (asleep|paralyzed|confused|burned|poisoned)", priority=28)
+def _self_status(m):
+    return [Effect(op="status", filter=m.group(1).lower(), dest="self")]
+
+
+@_pattern(r"you can use this card only if you discard another card from your hand", priority=28)
+def _card_cost(m):
+    return [Effect(op="discard_from_hand", n=1)]
+
+
+@_pattern(r"if this pok.mon is in the active spot and is damaged by an attack[^.]*?the attacking pok.mon is now (asleep|paralyzed|confused|burned|poisoned)", priority=29)
+def _thorns(m):
+    return [Effect(op="retaliate_status", filter=m.group(1).lower())]
+
+
+@_pattern(r"if heads,? during your opponent's next turn,? prevent all damage(?: from and effects of attacks)?(?: done to this pok.mon)?", priority=29)
+def _coin_barrier(m):
+    return [Effect(op="shield", n=999, chance=50)]
+
+
+@_pattern(r"if (?:any damage is done to this pok.mon by attacks|this pok.mon [^.]*?is damaged by an attack),? flip a coin", priority=29)
+def _dodge(m):
+    return [Effect(op="dodge", n=50)]
+
+
+@_pattern(r"if any of your pok.mon were knocked out by damage from an attack during your opponent's last turn,? this attack does (\d+) more damage", priority=29)
+def _revenge(m):
+    return [Effect(op="bonus_if", n=int(m.group(1)), filter="lost_a_pokemon")]
+
+
+@_pattern(r"you can use this card only if any of your (?:[\w' ]+ )?pok.mon were knocked out during your opponent's last turn", priority=29)
+def _revenge_cost(m):
+    return [Effect(op="requires_knockout")]
+
+
+@_pattern(r"each player shuffles their hand into their deck\. then,? you draw (\d+) cards?,? and your opponent draws (\d+) cards?", priority=29)
+def _stamp(m):
+    return [Effect(op="stamp", n=int(m.group(1)), dest=str(int(m.group(2))))]
+
+
+@_pattern(r"discard the top (\d+) cards? of your deck", priority=29)
+def _self_mill(m):
+    return [Effect(op="self_mill", n=int(m.group(1)))]
+
+
+@_pattern(r"if this pok.mon has at least (\d+) extra energy attached \(in addition to this attack's cost\),? this attack does (\d+) more damage", priority=29)
+def _extra_energy_bonus(m):
+    return [Effect(op="bonus_if", n=int(m.group(2)), filter=f"spare_energy:{m.group(1)}")]
+
+
+@_pattern(r"this attack does (\d+) more damage for each (?:\{?\w+\}? )?energy attached to your opponent's active pok.mon", priority=29)
+def _bonus_per_target_energy(m):
+    return [Effect(op="bonus_per", n=int(m.group(1)), filter="target_energy")]
+
+
+@_pattern(r"this attack does (\d+) more damage for each damage counter on your opponent's active pok.mon", priority=29)
+def _bonus_per_target_counters(m):
+    return [Effect(op="bonus_per", n=int(m.group(1)), filter="damage_counters_on_target")]
+
+
+@_pattern(r"this attack does (\d+) more damage for each (\{?\w+\}?) energy attached to this pok.mon", priority=29)
+def _bonus_per_own_typed_energy(m):
+    return [Effect(op="bonus_per", n=int(m.group(1)), filter="energy_on_self")]
+
+
+@_pattern(r"if your opponent's active pok.mon is affected by a special condition,? this attack does (\d+) more damage", priority=29)
+def _bonus_vs_status(m):
+    return [Effect(op="bonus_if", n=int(m.group(1)), filter="target_afflicted")]
+
+
+@_pattern(r"if your opponent's active pok.mon isn't (asleep|paralyzed|confused|burned|poisoned),? this attack does nothing", priority=29)
+def _needs_status(m):
+    return [Effect(op="requires_status", filter=m.group(1).lower())]
+
+
+@_pattern(r"during your opponent's next turn,? the defending pok.mon can't attack", priority=29)
+def _defender_cannot_attack_alt(m):
+    return [Effect(op="block_target")]
+
+
+@_pattern(r"put an energy attached to this pok.mon into your hand", priority=29)
+def _energy_to_hand(m):
+    return [Effect(op="energy_to_hand", n=1)]
+
+
+@_pattern(r"flip a coin for each energy attached to this pok.mon", priority=29)
+def _coins_per_energy(m):
+    return [Effect(op="coins", n=0, filter="own_energy")]
+
+
+@_pattern(r"you may choose (\d+) of your opponent's pok.mon and put (\d+) damage counters? on each of them", priority=30)
+def _spread_counters(m):
+    return [Effect(op="place_counters", n=int(m.group(2)) * 10, dest=f"many:{m.group(1)}")]
+
+
+@_pattern(r"heal all damage from (?:your active|each of your)[\w' {}]*pok.mon", priority=30)
+def _full_heal(m):
+    target = "heal_self" if "your active" in m.group(0).lower() else "heal_team"
+    return [Effect(op=target, n=999)]
+
+
+@_pattern(r"heal (\d+) damage from each of your pok.mon", priority=30)
+def _heal_everyone(m):
+    return [Effect(op="heal_team", n=int(m.group(1)))]
+
+
+@_pattern(r"put up to (\d+) [\w' ]+ cards? from your discard pile into your hand", priority=29)
+def _recover_named(m):
+    return [Effect(op="recover", n=int(m.group(1)), filter="any", dest="hand")]
+
+
+@_pattern(r"put a supporter card from your discard pile into your hand", priority=30)
+def _recover_supporter(m):
+    return [Effect(op="recover", n=1, filter="supporter", dest="hand")]
+
+
+@_pattern(r"this attack does (\d+) damage for each of your pok.mon in play", priority=30)
+def _scale_board(m):
+    return [Effect(op="scale", n=int(m.group(1)), filter="own_in_play")]
+
+
+@_pattern(r"for each of your benched pok.mon,? search your deck for a card that evolves from that pok.mon", priority=30)
+def _rare_candy_line(m):
+    return [Effect(op="search", n=3, filter="evolution")]
+
+
+@_pattern(r"attacks used by this pok.mon cost \{c\} less for each [\w' ]+ card in your discard pile", priority=30)
+def _cheaper_per_discard(m):
+    return [Effect(op="cost_less", n=1, filter="any")]
+
+
+@_pattern(r"^your turn ends", priority=30)
+def _turn_ends(m):
+    return [Effect(op="end_turn")]
+
+
+@_pattern(r"you can use this attack only if you go second,? and only during your first turn", priority=30)
+def _second_turn_only(m):
+    return [Effect(op="requires_opening_turn")]
 
 
 @_pattern(r"once during your turn,? if this pok.mon has any energy attached,? you may use this ability", priority=28)

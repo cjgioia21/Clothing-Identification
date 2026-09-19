@@ -209,3 +209,75 @@ def test_a_free_switch_is_taken_to_dodge_a_knockout(battle):
         turn_played=0,
     )
     assert Policy().wants_switch(battle, 0)
+
+
+# --------------------------------------------- the generic text the pool is full of
+def test_flip_until_tails_keeps_flipping(battle):
+    effects, unread = compile_text(
+        "Flip a coin until you get tails. This attack does 20 more damage for each heads.")
+    assert not unread
+    assert {e.op for e in effects} == {"coins", "bonus_per"}
+    flips = {battle._flip_coins(Effect(op="coins", filter="until_tails")) for _ in range(40)}
+    assert len(flips) > 1 and min(flips) == 0
+
+
+def test_milling_moves_cards_off_the_opponents_deck(battle):
+    from pokedeck.scripts import run
+    foe = battle.sides[1]
+    top = list(foe.deck[:2])
+    run(battle, 0, [Effect(op="mill", n=2)])
+    assert foe.discard[-2:] == top
+    assert foe.deck[:2] != top
+
+
+def test_ignoring_defences_walks_through_a_shield(battle):
+    target = Spot(stack=[basic("Wallmon")], turn_played=0, shield=200, shield_until=battle.turn)
+    attacker = Spot(stack=[basic("Hitmon")], turn_played=0)
+    assert battle.final_damage(150, attacker, target, index=0) == 0
+    assert battle.final_damage(150, attacker, target, index=0, ignore_defences=True) == 150
+
+
+def test_stripping_tools_before_damage(battle):
+    pool = load_pool()
+    tool = pool.lookup("Bravery Charm", "PAL", "173")
+    target = battle.sides[1].active
+    target.tool = tool
+    battle._strip(0, target, "tool")
+    assert target.tool is None and tool in battle.sides[1].discard
+
+
+def test_a_stamp_resets_both_hands(battle):
+    from pokedeck.scripts import run
+    mine, foe = battle.sides
+    mine.hand = mine.hand[:2]
+    foe.hand = foe.hand[:6]
+    run(battle, 0, [Effect(op="stamp", n=5, dest="2")])
+    assert len(mine.hand) == 5
+    assert len(foe.hand) == 2
+
+
+def test_a_revenge_supporter_needs_a_knockout_first(battle):
+    from pokedeck.scripts import gated
+    script = [Effect(op="requires_knockout"), Effect(op="draw", n=5)]
+    battle.sides[0].lost_on_turn = -1
+    assert gated(battle, 0, script, None)
+    battle.sides[0].lost_on_turn = battle.turn - 1
+    assert not gated(battle, 0, script, None)
+
+
+def test_thorns_poison_whatever_attacked(battle):
+    thorny = basic("Thornmon", ability=(Effect(op="retaliate_status", filter="poisoned"),))
+    target = Spot(stack=[thorny], turn_played=0)
+    attacker = Spot(stack=[basic("Hitmon")], turn_played=0)
+    battle._retaliate(0, attacker, target)
+    assert attacker.poisoned
+
+
+def test_your_turn_ends_stops_the_rest_of_the_turn(battle):
+    from pokedeck.scripts import run
+    run(battle, 0, [Effect(op="end_turn")])
+    assert battle.sides[0].turn_over
+    battle.sides[0].hand = list(battle.sides[0].deck[:5])
+    before = len(battle.sides[0].hand)
+    Policy().play_turn(battle, 0)
+    assert len(battle.sides[0].hand) == before   # nothing was played

@@ -230,7 +230,7 @@ class ChampionPolicy(Policy):
     # ------------------------------------------------------------- main phase
     def play_turn(self, battle, index: int) -> None:
         for _ in range(MAX_ACTIONS):
-            if battle.finished:
+            if battle.finished or battle.sides[index].turn_over:
                 return
             actions = legal_actions(battle, index)
             if not actions:

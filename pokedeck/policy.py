@@ -102,7 +102,9 @@ class Policy:
     # ------------------------------------------------------------------- turn
     def play_turn(self, battle, index: int) -> None:
         for _ in range(MAX_ACTIONS):
-            if battle.finished or not self.take_action(battle, index):
+            if battle.finished or battle.sides[index].turn_over:
+                return
+            if not self.take_action(battle, index):
                 break
         self.consider_retreat(battle, index)
 
