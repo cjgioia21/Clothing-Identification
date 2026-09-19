@@ -235,3 +235,48 @@ def test_a_pokemon_can_pick_itself_up_off_the_board(battle):
     run(battle, 0, effects, spot)
     assert spot not in side.bench
     assert card in side.hand and extra in side.hand
+
+
+# ------------------------------------------------ two of the same Pokémon out
+def test_two_identical_pokemon_are_still_two_pokemon(battle):
+    """Retreating with a twin on the Bench used to leave one in both places.
+
+    Spot is a dataclass; with value equality, bench.remove(spot) took whichever
+    copy it met first, so the Pokémon being promoted stayed benched as well —
+    and every later count of the board saw it twice.
+    """
+    side = battle.sides[0]
+    twin = basic("Dunsparce")
+    side.active = Spot(stack=[twin], turn_played=0)
+    side.bench = [Spot(stack=[twin], turn_played=0), Spot(stack=[twin], turn_played=0)]
+    assert len({id(s) for s in side.in_play()}) == 3
+
+    moving = side.bench[0]
+    battle.switch_active(0, moving)
+    assert side.active is moving
+    assert moving not in side.bench
+    spots = side.in_play()
+    assert len(spots) == 3 and len({id(s) for s in spots}) == 3
+
+
+def test_promoting_from_a_bench_of_twins_removes_the_right_one(battle):
+    side = battle.sides[0]
+    twin = basic("Dunsparce")
+    side.active = None
+    side.bench = [Spot(stack=[twin], turn_played=0) for _ in range(3)]
+    assert battle.promote(0)
+    assert len(side.bench) == 2
+    assert len({id(s) for s in side.in_play()}) == 3
+
+
+def test_energy_is_never_moved_off_a_pokemon_that_has_none(battle):
+    """The crash this bug surfaced: the same Spot listed twice as a donor."""
+    from pokedeck.scripts import _move_energy
+    side = battle.sides[0]
+    twin = basic("Dunsparce", attacks=(Attack(name="Hit", cost=("Colorless",), damage=10),))
+    energy = load_pool().lookup("Basic Fire Energy", "SVE", "2")
+    side.active = Spot(stack=[twin], turn_played=0)
+    side.bench = [Spot(stack=[twin], turn_played=0, energy=[energy]),
+                  Spot(stack=[twin], turn_played=0)]
+    _move_energy(battle, 0, 3)          # more moves than there is Energy to move
+    assert sum(len(s.energy) for s in side.in_play()) == 1

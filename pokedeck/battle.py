@@ -50,9 +50,16 @@ def _symbol_matches(symbol: str, types) -> bool:
 SPECIAL_CONDITIONS = (ASLEEP, PARALYZED, CONFUSED)
 
 
-@dataclass
+@dataclass(eq=False)
 class Spot:
-    """One Pokémon in play, with its stack, Energy, tool and damage."""
+    """One Pokémon in play, with its stack, Energy, tool and damage.
+
+    Compared by identity, not by contents. Two Dunsparce sitting on the Bench
+    with no Energy and no damage are equal field for field but are not the same
+    Pokémon — and ``bench.remove(spot)`` would otherwise take whichever one it
+    met first, leaving the Pokémon that was meant to move both Active and
+    benched at once.
+    """
 
     stack: list[Card]
     turn_played: int
