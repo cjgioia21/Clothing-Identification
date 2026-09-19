@@ -361,7 +361,21 @@ def main() -> int:
     for cut, rate in sorted(cut_only.items(), key=lambda kv: -kv[1]):
         note(f"    -1 {cut} for a {filler} alone: {rate:.1%} ({rate - base_full:+.1%})")
 
+    # Print what each winner actually says. Twice now a recommendation has been
+    # the compiler misreading a rider rather than the card being good, and the
+    # printed text beside the number is what makes that visible.
     real = [t for t in rows if t.delta > noise]
+    if real:
+        note("\n  what these cards say")
+        for trial in real:
+            card = pool.lookup(trial.add)
+            if card is None:
+                continue
+            lines = [card.ability_text or ""] + [f"{a.name}: {a.text}" for a in card.attacks]
+            head = f"{card.hp} HP, {card.prize_value} prize" if card.hp else "Energy"
+            note(f"    {trial.add}  ({head})")
+            for line in [x for x in lines if x.strip()]:
+                note(f"      {line.strip()[:110]}")
     if real:
         best = real[0]
         note(f"\nWhere {best.label.strip()} moved the matchups")
