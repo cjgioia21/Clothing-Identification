@@ -88,6 +88,20 @@ Every game is played out properly, by the same player on both sides:
 - **Knockouts and winning** — prizes taken by rule-box value (ex and V take two,
   Mega Evolution ex and VMAX three), promotion from the Bench, and all three win
   conditions: six prizes, no Pokémon left, or an empty deck on the draw step.
+- **Damage modifiers, in the printed order** — Tools and Abilities that add
+  damage (Maximum Belt against an ex, a team buff) land before Weakness and
+  Resistance; the defender's own reductions come last. Abilities that rewrite
+  Weakness, Tools that add HP or take Energy off a retreat, and Abilities that
+  make a named attack cheaper all apply.
+- **Lockdowns** — Ability lock (neither side may use Abilities), Item lock for
+  a turn, and an attack locked out of being used again next turn.
+- **Damage counters** — placed by Abilities such as Dusclops and Dusknoir,
+  which knock themselves out as the price, moved around by Munkidori, and
+  spread by attacks.
+- **Energy that counts as more than one thing** — a rainbow Energy is one unit
+  that can pay any symbol (and only on a Basic, for Prism; only on a Stage 2,
+  and for two, for Neo Upper). Typed costs are paid with the least flexible
+  Energy that fits, so the rainbow is kept for what needs it.
 - **Stadiums** — the once-a-turn ability each player may use (Fossil Quarry,
   Artazon, Lumiose City) and the ones that prevent damage, such as
   Neutralization Zone blanking attacks from the opponent's ex and V.
@@ -155,11 +169,16 @@ understands the card text the compiler could read. It plays a clean, tactical
 game and it does not misplay the obvious things — that is the honest ceiling
 here.
 
-**Not modelled:** the Lost Zone, most damage-modifying Abilities, Stadium
-effects beyond occupying the slot, Ability lock, attack choices that depend on
-reading the opponent, and any card text the compiler could not parse. Nothing is
-silently invented: an unreadable rider just does not fire, and the coverage line
-in every report tells you how much of your deck was taken literally.
+Across the hundred field decks, **97% of distinct cards are fully modelled** —
+every line of their printed text turned into rules. The rest is reported, never
+guessed at.
+
+**Not modelled:** the Lost Zone, attack choices that depend on reading the
+opponent, a handful of card-specific riders (a Pokémon that may only attack
+while the opponent has an ex in play, prize-count clauses on a knockout), and
+any text the compiler could not parse. Nothing is silently invented: an
+unreadable rider just does not fire, and the coverage line in every report
+tells you how much of your deck was taken literally.
 
 ```
   card text modelled  95.0%

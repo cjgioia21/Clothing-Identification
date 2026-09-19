@@ -42,10 +42,12 @@ def legal_actions(battle, index: int) -> list[Action]:
         seen.add(signature)
         actions.append(Action(kind=kind, hand=hand, spot=spot))
 
+    abilities_off = battle.abilities_locked(index)
     for position, spot in enumerate(side.in_play()):
         card = spot.card
         if (
-            card.ability
+            not abilities_off
+            and card.ability
             and card.ability_trigger == "turn"
             and spot.ability_used_turn != battle.turn
             and spot.turn_played < battle.turn
@@ -71,14 +73,16 @@ def legal_actions(battle, index: int) -> list[Action]:
             if battle.can_play_supporter(index, card) and card.effects:
                 offer("supporter", hand=position, key=("supporter", card.name))
         elif card.subtype is Subtype.ITEM:
-            if card.effects and useful(battle, index, card.effects):
+            if card.effects and not battle.items_locked(index) and useful(battle, index, card.effects):
                 offer("item", hand=position, key=("item", card.name))
         elif card.subtype is Subtype.TOOL:
             for target, spot in enumerate(side.in_play()):
                 if spot.tool is None:
                     offer("tool", hand=position, spot=target, key=("tool", card.name, target))
         elif card.subtype is Subtype.STADIUM:
-            if battle.stadium is None or battle.stadium_owner != index:
+            if battle.can_play_stadium(card) and (
+                battle.stadium is None or battle.stadium_owner != index
+            ):
                 offer("stadium", hand=position, key=("stadium", card.name))
 
     stadium = battle.stadium_ability(index)
@@ -86,7 +90,7 @@ def legal_actions(battle, index: int) -> list[Action]:
         offer("stadium_ability", key=("stadium_ability",))
 
     if side.active is not None and not side.retreated:
-        cost = side.active.retreat_cost()
+        cost = battle.retreat_cost(index, side.active)
         if cost <= len(side.active.energy) and side.active.condition not in ("asleep", "paralyzed"):
             for target, spot in enumerate(side.bench, start=1):
                 offer("retreat", spot=target, key=("retreat", spot.name, target))
@@ -131,7 +135,7 @@ def apply_action(battle, index: int, action: Action) -> bool:
 
     if action.kind == "retreat":
         target = spots[action.spot]
-        cost = side.active.retreat_cost()
+        cost = battle.retreat_cost(index, side.active)
         for _ in range(cost):
             side.discard.append(side.active.energy.pop())
         battle.switch_active(index, target)
@@ -155,12 +159,11 @@ def apply_action(battle, index: int, action: Action) -> bool:
             side.discard.append(candy)
             card = side.hand[side.hand.index(card)]
         side.hand.remove(card)
-        target.stack.append(card)
-        target.damage = min(target.damage, max(0, card.hp - 1))
+        target.stack.append(card)  # damage counters stay on through evolution
         target.condition = None
         target.ability_used_turn = -1
         if card.ability and card.ability_trigger in ("on_play", "on_evolve"):
-            if useful(battle, index, card.ability, target):
+            if not battle.abilities_locked(index) and useful(battle, index, card.ability, target):
                 target.ability_used_turn = battle.turn
                 run(battle, index, card.ability, target)
         return True

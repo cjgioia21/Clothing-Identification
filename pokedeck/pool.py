@@ -167,12 +167,20 @@ def _pokemon(record: dict) -> Card:
     )
 
 
+ALL_ENERGY_TYPES = (
+    "Grass", "Fire", "Water", "Lightning", "Psychic",
+    "Fighting", "Darkness", "Metal", "Dragon", "Colorless",
+)
+
+
 def _energy(record: dict) -> Card:
     is_basic = (record.get("energyType") == "Normal") or record["name"].startswith("Basic ")
+    text = record.get("effect") or ""
     provides = tuple(record.get("types", ()) or ())
-    effects, _ = ((), []) if is_basic else compile_ability({"effect": record.get("effect", "")})[:2]
+    effects, _ = ((), []) if is_basic else compile_ability({"effect": text})[:2]
+    wild_if, wild_count = _wildcard_rule(text)
     if not provides:
-        provides = ("Colorless",)
+        provides = _provided_types(text)
     return Card(
         name=record["name"],
         category=Category.ENERGY,
@@ -180,7 +188,9 @@ def _energy(record: dict) -> Card:
         known=True,
         effects=tuple(effects) if not is_basic else (),
         energy_provides=provides,
-        energy_count=2 if "provides 2" in (record.get("effect") or "") else 1,
+        energy_count=2 if "provides 2 {" in text else 1,
+        energy_wild_if=wild_if,
+        energy_wild_count=wild_count,
         card_id=record.get("id", ""),
         regulation=str(record.get("regulationMark") or ""),
         set_id=str(record.get("set") or ""),
@@ -205,6 +215,41 @@ def _trainer(record: dict) -> Card:
         regulation=str(record.get("regulationMark") or ""),
         set_id=str(record.get("set") or ""),
     )
+
+
+def _wildcard_rule(text: str) -> tuple[str, int]:
+    """When (and how much) a Special Energy counts as every type.
+
+    Prism Energy is a rainbow only on a Basic, Neo Upper only on a Stage 2 —
+    and then for two Energy at once.
+    """
+    lowered = (text or "").lower()
+    match = re.search(
+        r"if this card is attached to a (basic|stage 2) pok.mon, this card provides every type"
+        r"[^.]*?provides only (\d+) energy",
+        lowered,
+    )
+    if match:
+        return ("basic" if match.group(1) == "basic" else "stage2"), int(match.group(2))
+    plain = re.search(r"provides every type of energy[^.]*?provides only (\d+) energy", lowered)
+    if plain:
+        return "always", int(plain.group(1))
+    return "", 1
+
+
+def _provided_types(text: str) -> tuple[str, ...]:
+    """What a Special Energy counts as, read off the card.
+
+    The rainbow case is handled by :func:`_wildcard_rule`; this is the plain
+    symbol it provides otherwise.
+    """
+    lowered = text.lower()
+    symbols = re.findall(r"provides \{(\w)\}", lowered)
+    if symbols:
+        from .battle import _type_for  # local import: battle imports the pool's cards
+
+        return tuple(dict.fromkeys(_type_for(symbol) for symbol in symbols))
+    return ("Colorless",)
 
 
 def _resistance_value(resistances: list[dict]) -> int:

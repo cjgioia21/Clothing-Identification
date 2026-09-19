@@ -130,6 +130,8 @@ class Card:
     set_id: str = ""
     energy_provides: tuple[str, ...] = ()
     energy_count: int = 1
+    energy_wild_if: str = ""   # "", "always", "basic" or "stage2"
+    energy_wild_count: int = 1
 
     @property
     def is_basic_pokemon(self) -> bool:
@@ -194,6 +196,8 @@ class Card:
             set_id=raw.get("set_id", ""),
             energy_provides=tuple(raw.get("energy_provides", ())),
             energy_count=int(raw.get("energy_count", 1)),
+            energy_wild_if=raw.get("energy_wild_if", ""),
+            energy_wild_count=int(raw.get("energy_wild_count", 1)),
             known=True,
         )
 

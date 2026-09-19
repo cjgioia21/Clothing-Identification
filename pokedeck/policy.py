@@ -85,6 +85,8 @@ class Policy:
 
     def use_abilities(self, battle, index: int) -> bool:
         side = battle.sides[index]
+        if battle.abilities_locked(index):
+            return False
         for spot in side.in_play():
             card = spot.card
             if not card.ability or card.ability_trigger != "turn":
@@ -114,12 +116,16 @@ class Policy:
 
     def on_bench(self, battle, index: int, spot) -> None:
         card = spot.card
+        if battle.abilities_locked(index):
+            return
         if card.ability and card.ability_trigger == "on_play" and useful(battle, index, card.ability, spot):
             spot.ability_used_turn = battle.turn
             run(battle, index, card.ability, spot)
 
     def play_setup_items(self, battle, index: int) -> bool:
         side = battle.sides[index]
+        if battle.items_locked(index):
+            return False
         for card in [c for c in side.hand if c.subtype is Subtype.ITEM]:
             if not any(e.op == "search" and "pokemon" in e.filter for e in card.effects):
                 continue
@@ -229,8 +235,7 @@ class Policy:
             if target is None:
                 continue
             side.hand.remove(card)
-            target.stack.append(card)
-            target.damage = min(target.damage, max(0, card.hp - 1))
+            target.stack.append(card)  # damage counters stay on through evolution
             target.condition = None
             target.ability_used_turn = -1
             if card.ability and card.ability_trigger in ("on_play", "on_evolve"):
@@ -351,6 +356,8 @@ class Policy:
 
     def play_items(self, battle, index: int) -> bool:
         side = battle.sides[index]
+        if battle.items_locked(index):
+            return False
         for card in [c for c in side.hand if c.subtype is Subtype.ITEM]:
             if not card.effects or not useful(battle, index, card.effects):
                 continue
@@ -364,7 +371,8 @@ class Policy:
         side = battle.sides[index]
         if battle.stadium is not None and battle.stadium_owner == index:
             return False
-        stadiums = [c for c in side.hand if c.subtype is Subtype.STADIUM]
+        stadiums = [c for c in side.hand
+                    if c.subtype is Subtype.STADIUM and battle.can_play_stadium(c)]
         if not stadiums:
             return False
         battle.play_stadium(index, stadiums[0])
@@ -388,7 +396,7 @@ class Policy:
             return
         if any(battle.can_pay(spot, a) for a in spot.card.attacks):
             return
-        cost = spot.retreat_cost()
+        cost = battle.retreat_cost(index, spot)
         if cost > len(spot.energy):
             return
         replacement = self.best_bench(battle, index)

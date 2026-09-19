@@ -26,6 +26,27 @@ MAX_MULLIGANS = 20
 DEFAULT_TURN_LIMIT = 60
 
 ASLEEP, PARALYZED, CONFUSED = "asleep", "paralyzed", "confused"
+
+_ANY_TYPE = frozenset({
+    "Grass", "Fire", "Water", "Lightning", "Psychic",
+    "Fighting", "Darkness", "Metal", "Dragon", "Colorless",
+})
+
+_TYPE_FOR_SYMBOL = {
+    "G": "Grass", "R": "Fire", "W": "Water", "L": "Lightning", "P": "Psychic",
+    "F": "Fighting", "D": "Darkness", "M": "Metal", "C": "Colorless",
+    "N": "Dragon", "Y": "Fairy",
+}
+
+
+def _type_for(symbol: str) -> str:
+    """Card text writes types as {P}; the rest of the engine spells them out."""
+    symbol = (symbol or "").strip("{}")
+    return _TYPE_FOR_SYMBOL.get(symbol.upper(), symbol.title())
+
+
+def _symbol_matches(symbol: str, types) -> bool:
+    return _type_for(symbol) in types
 SPECIAL_CONDITIONS = (ASLEEP, PARALYZED, CONFUSED)
 
 
@@ -73,10 +94,13 @@ class Spot:
     @property
     def max_hp(self) -> int:
         bonus = 0
-        if self.tool is not None and "+50 HP" in (self.tool.ability_text or ""):
-            bonus = 50 if self.card.stage is Stage.BASIC else 0
-        if self.tool is not None and "+100 HP" in (self.tool.ability_text or ""):
-            bonus = 100
+        for effect in self.tool.effects if self.tool else ():
+            if effect.op == "hp_boost":
+                # Bravery Charm only helps a Basic; Hero's Cape helps anything.
+                text = (self.tool.ability_text or "").lower()
+                if "basic pok" in text and self.card.stage is not Stage.BASIC:
+                    continue
+                bonus += effect.n
         return (self.card.hp or 60) + bonus
 
     @property
@@ -91,21 +115,46 @@ class Spot:
     def prize_value(self) -> int:
         return max(1, self.card.prize_value)
 
-    def energy_types(self) -> list[str]:
-        types: list[str] = []
+    def energy_units(self) -> list[frozenset[str]]:
+        """Each attached Energy as the set of types it can pay for.
+
+        A rainbow Energy is one unit that counts as anything, not ten units —
+        which is the difference between paying a cost and not.
+        """
+        units: list[frozenset[str]] = []
         for card in self.energy:
-            provided = card.energy_provides or ("Colorless",)
-            for _ in range(max(1, card.energy_count)):
-                types.extend(provided[:1] if card.energy_count == 1 else provided)
-        return types
+            wild = card.energy_wild_if
+            applies = (
+                wild == "always"
+                or (wild == "basic" and self.card.stage is Stage.BASIC)
+                or (wild == "stage2" and self.card.stage is Stage.STAGE2)
+            )
+            if applies:
+                units.extend([_ANY_TYPE] * max(1, card.energy_wild_count))
+                continue
+            provided = frozenset(card.energy_provides or ("Colorless",))
+            units.extend([provided] * max(1, card.energy_count))
+        return units
+
+    def energy_types(self) -> list[str]:
+        """A flat list of what is attached, for counting rather than paying."""
+        return [sorted(unit)[0] if unit is not _ANY_TYPE else "Colorless"
+                for unit in self.energy_units()]
 
     def retreat_cost(self) -> int:
+        """Printed cost, less whatever the attached Tool takes off it."""
         cost = self.card.retreat
-        if self.tool is not None:
-            for effect in self.tool.effects:
-                if effect.op == "retreat_less":
-                    cost -= effect.n
+        for effect in self.tool.effects if self.tool else ():
+            if effect.op == "retreat_less":
+                cost -= effect.n
+            elif effect.op == "no_retreat_cost" and effect.filter == "hurt_holder":
+                if self.remaining_hp <= effect.n:
+                    return 0
         return max(0, cost)
+
+    def passives(self, op: str):
+        """Effects this Pokémon's Ability contributes while it sits in play."""
+        return [e for e in self.card.ability if e.op == op]
 
 
 @dataclass
@@ -127,6 +176,9 @@ class Side:
     retreated: bool = False
     stadium_used: bool = False
     lost_pokemon: int = 0
+    items_locked_until: int = -1
+    locked_attack: str = ""
+    locked_attack_until: int = -1
 
     # ------------------------------------------------------------------ board
     def in_play(self) -> list[Spot]:
@@ -171,6 +223,9 @@ class Side:
         clone.retreated = self.retreated
         clone.stadium_used = self.stadium_used
         clone.lost_pokemon = self.lost_pokemon
+        clone.items_locked_until = self.items_locked_until
+        clone.locked_attack = self.locked_attack
+        clone.locked_attack_until = self.locked_attack_until
         return clone
 
     def discard_spot(self, spot: Spot) -> None:
@@ -430,13 +485,16 @@ class Battle:
             return plan
         per = max(e.n for e in scalers)
         source = "hand" if any(e.filter == "hand" for e in scalers) else "pokemon"
+        bonus = any(e.dest == "bonus" for e in scalers)
         available = self._discardable_energy(index, source)
         if per <= 0 or not available:
-            plan.update(per=per, discard_k=0, source=source)
+            plan.update(per=per, discard_k=0, source=source, bonus=bonus)
             return plan
         multiplier = 2 if target.card.weakness and target.card.weakness in spot.card.types else 1
-        needed = -(-target.remaining_hp // (per * multiplier))
-        plan.update(per=per, source=source, discard_k=min(len(available), max(1, needed)))
+        headroom = max(0, target.remaining_hp - (attack.damage if bonus else 0))
+        needed = -(-headroom // (per * multiplier)) if headroom else 0
+        plan.update(per=per, source=source, bonus=bonus,
+                    discard_k=min(len(available), max(0 if bonus else 1, needed)))
         return plan
 
     def _discardable_energy(self, index: int, source: str) -> list:
@@ -458,8 +516,14 @@ class Battle:
         side = self.sides[attacker_index]
         foe = self.opponent(attacker_index)
 
+        if any(e.op == "requires_stadium" for e in attack.effects) and self.stadium is None:
+            return 0
+        coins = next((e.n for e in attack.effects if e.op == "coins"), 0)
+        self._heads_flipped = sum(1 for _ in range(coins) if self.flip()) if coins else 0
+
         if "discard_k" in plan:
-            return plan["per"] * plan["discard_k"]
+            scaled = plan["per"] * plan["discard_k"]
+            return attack.damage + scaled if plan.get("bonus") else scaled
         scale = next((e for e in attack.effects if e.op == "scale"), None)
         if scale is not None:
             return scale.n * self._counter(scale.filter, side, foe, spot)
@@ -475,6 +539,8 @@ class Battle:
         if attack.scaling == "x":
             damage = attack.damage * max(1, self._scaling_count(attack, side, foe, spot))
         return damage
+
+    _heads_flipped = 0
 
     def _scaling_count(self, attack: Attack, side: Side, foe: Side, spot: Spot) -> int:
         """How many times a printed "30×" attack multiplies."""
@@ -492,6 +558,8 @@ class Battle:
         return 1
 
     def _counter(self, source: str, side: Side, foe: Side, spot: Spot) -> int:
+        if source == "heads":
+            return self._heads_flipped
         if source.startswith("attack:"):
             wanted = source.split(":", 1)[1].casefold()
             return sum(
@@ -523,9 +591,16 @@ class Battle:
             self.check_knockouts()
             return
 
+        if any(e.op == "fails_on_tails" for e in attack.effects) and not self.flip():
+            self.note(f"{side.name} {spot.name} misses with {attack.name}")
+            return
+        if self.attack_blocked(attacker_index, attack):
+            return
+
         plan = self.attack_plan(attacker_index, attack, spot, target)
         raw = self.attack_damage(attacker_index, attack, spot, target, plan)
-        dealt = self.final_damage(raw, spot, target)
+        ignore = any(e.op == "ignore_weakness" for e in attack.effects)
+        dealt = self.final_damage(raw, spot, target, attacker_index, ignore_weakness=ignore)
         self.note(f"{side.name} {spot.name} uses {attack.name} for {dealt}")
         if dealt:
             self.damage_spot(1 - attacker_index, target, dealt, source=attack.name)
@@ -533,6 +608,85 @@ class Battle:
         for effect in attack.effects:
             self.apply_attack_effect(attacker_index, effect, spot, target, plan)
         self.check_knockouts()
+
+    def team_passives(self, index: int, op: str):
+        """Passive Ability effects from every Pokémon that player has in play."""
+        found = []
+        for spot in self.sides[index].in_play():
+            if self.abilities_locked(index):
+                break
+            for effect in spot.card.ability:
+                if effect.op == op:
+                    found.append((spot, effect))
+        return found
+
+    def abilities_locked(self, index: int) -> bool:
+        """Is this player's Ability use switched off by the board?"""
+        if self.stadium is not None and any(e.op == "lock_abilities" for e in self.stadium.effects):
+            return True
+        for spot in self.opponent(index).in_play():
+            if any(e.op == "lock_abilities" for e in spot.card.ability):
+                return True
+        return False
+
+    def items_locked(self, index: int) -> bool:
+        return self.sides[index].items_locked_until >= self.turn
+
+    def attack_blocked(self, index: int, attack: Attack) -> bool:
+        side = self.sides[index]
+        return side.locked_attack == attack.name and side.locked_attack_until >= self.turn
+
+    def damage_boost(self, index: int, spot: Spot, target: Spot) -> int:
+        """Extra damage from the attacker's Tool and from Abilities in play."""
+        bonus = 0
+        for effect in spot.tool.effects if spot.tool else ():
+            if effect.op != "boost_damage":
+                continue
+            if effect.filter == "holder_vs_rule_box" and not target.card.rule_box:
+                continue
+            bonus += effect.n
+        for source, effect in self.team_passives(index, "boost_damage"):
+            if effect.filter in ("holder", "holder_vs_rule_box"):
+                continue
+            if effect.filter and effect.filter not in spot.name.casefold():
+                continue
+            if source is spot and "except" in (source.card.ability_text or "").lower():
+                continue  # "except any <this Pokémon>"
+            bonus += effect.n
+        return bonus
+
+    def damage_reduction(self, index: int, target: Spot, attacker: Spot) -> int:
+        """Damage the defending Pokémon shrugs off, from its Tool or Ability."""
+        reduction = 0
+        for effect in target.tool.effects if target.tool else ():
+            if effect.op == "reduce_damage":
+                reduction += effect.n
+        if not self.abilities_locked(index):
+            for effect in target.card.ability:
+                if effect.op == "reduce_damage":
+                    reduction += effect.n
+        return reduction
+
+    def weakness_of(self, index: int, target: Spot) -> str:
+        """The defender's Weakness, after any Ability that rewrites it.
+
+        The Ability belongs to the attacking side — it rewrites the Weakness of
+        "your opponent's" Pokémon, which is whoever is being attacked.
+        """
+        for _, effect in self.team_passives(index, "set_weakness"):
+            if _symbol_matches(effect.filter, target.card.types):
+                return _type_for(effect.dest)
+        return target.card.weakness
+
+    def retreat_cost(self, index: int, spot: Spot) -> int:
+        """Retreat cost including team Abilities that reduce or remove it."""
+        cost = spot.retreat_cost()
+        for _, effect in self.team_passives(index, "no_retreat_cost"):
+            if effect.filter == "basic_pokemon" and spot.card.is_basic_pokemon:
+                return 0
+            if effect.filter == "any":
+                return 0
+        return cost
 
     def sheltered(self, attacker: Spot, target: Spot) -> bool:
         """Is the target behind a Stadium that blanks rule-box attackers?"""
@@ -542,16 +696,34 @@ class Battle:
             return False
         return not target.card.rule_box and bool(attacker.card.rule_box)
 
-    def final_damage(self, raw: int, spot: Spot, target: Spot) -> int:
+    def final_damage(
+        self,
+        raw: int,
+        spot: Spot,
+        target: Spot,
+        index: int | None = None,
+        ignore_weakness: bool = False,
+    ) -> int:
+        """Work the damage out in the printed order.
+
+        Boosts land before Weakness and Resistance; the defender's own
+        reductions come last, the way the rulebook does it.
+        """
         if raw <= 0:
             return 0
         if self.sheltered(spot, target):
             return 0
-        damage = raw
-        if target.card.weakness and target.card.weakness in spot.card.types:
-            damage *= 2
-        if target.card.resistance and target.card.resistance in spot.card.types:
-            damage -= target.card.resistance_value
+        if index is None:
+            index = 0 if spot in self.sides[0].in_play() else 1
+
+        damage = raw + self.damage_boost(index, spot, target)
+        if not ignore_weakness:
+            weakness = self.weakness_of(index, target)
+            if weakness and weakness in spot.card.types:
+                damage *= 2
+            if target.card.resistance and target.card.resistance in spot.card.types:
+                damage -= target.card.resistance_value
+        damage -= self.damage_reduction(1 - index, target, spot)
         if target.shield and target.shield_until >= self.turn:
             damage -= target.shield
         return max(0, damage)
@@ -608,6 +780,17 @@ class Battle:
             self.snipe_many(index, effect.n, int(effect.dest or 1))
         elif op == "discard_energy_scale" and plan:
             self.pay_scaled_discard(index, plan)
+        elif op == "hit_rule_boxes":
+            for other in list(foe.in_play()):
+                if other.card.rule_box:
+                    self.damage_spot(1 - index, other, effect.n, source="spread")
+        elif op == "lock_items":
+            foe.items_locked_until = self.turn + 1
+        elif op == "lock_attack":
+            best = max(target.card.attacks, key=lambda a: a.damage, default=None)
+            if best is not None:
+                foe.locked_attack = best.name
+                foe.locked_attack_until = self.turn + 1
         elif op == "search":
             from .scripts import run
 
@@ -723,20 +906,35 @@ class Battle:
         spot.energy.append(card)
         side.energy_attached += 1
 
-    def can_pay(self, spot: Spot, attack: Attack) -> bool:
-        """Does the Pokémon's Energy cover the attack cost?"""
-        available = spot.energy_types()
-        needed = [c for c in attack.cost if c not in ("Colorless",)]
+    def can_pay(self, spot: Spot, attack: Attack, index: int | None = None) -> bool:
+        """Does the Pokémon's Energy cover the attack cost?
+
+        Typed requirements are matched first, spending the least flexible
+        Energy that fits, so a rainbow is kept back for whatever needs it.
+        """
+        units = spot.energy_units()
+        needed = [c for c in attack.cost if c != "Colorless"]
         colorless = len(attack.cost) - len(needed)
-        pool = list(available)
+        colorless = max(0, colorless - self.cost_discount(spot, attack))
+
         for requirement in needed:
-            match = next((e for e in pool if e == requirement), None)
-            if match is None:
-                # Pokémon with a single type accept their own basic Energy only;
-                # anything printed as {C} is covered below.
+            options = [unit for unit in units if requirement in unit]
+            if not options:
                 return False
-            pool.remove(match)
-        return len(pool) >= colorless
+            units.remove(min(options, key=len))
+        return len(units) >= colorless
+
+    def cost_discount(self, spot: Spot, attack: Attack) -> int:
+        """Abilities that make a named attack cheaper, such as Bloodmoon's."""
+        discount = 0
+        for effect in spot.card.ability:
+            if effect.op != "cost_less":
+                continue
+            if effect.filter and effect.filter != attack.name.casefold():
+                continue
+            foe_index = 0 if spot in self.sides[1].in_play() else 1
+            discount += effect.n * self.sides[foe_index].prizes_taken
+        return discount
 
     def usable_attacks(self, index: int) -> list[Attack]:
         """Attacks the Active can pay for, including any it is allowed to copy."""
@@ -747,7 +945,8 @@ class Battle:
         if self.copies_bench_attacks(side.active):
             for spot in side.bench:
                 attacks.extend(spot.card.attacks)
-        return [a for a in attacks if self.can_pay(side.active, a)]
+        return [a for a in attacks
+                if self.can_pay(side.active, a) and not self.attack_blocked(index, a)]
 
     @staticmethod
     def copies_bench_attacks(spot: Spot) -> bool:
@@ -762,6 +961,10 @@ class Battle:
         if not self.stadium.effects or not is_once_per_turn(self.stadium.ability_text):
             return None
         return self.stadium.effects
+
+    def can_play_stadium(self, card: Card) -> bool:
+        """A Stadium may not be replaced by another copy of itself."""
+        return self.stadium is None or self.stadium.name != card.name
 
     def play_stadium(self, index: int, card: Card) -> None:
         side = self.sides[index]

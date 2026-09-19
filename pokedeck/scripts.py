@@ -63,6 +63,25 @@ def useful(battle, index: int, effects, spot=None) -> bool:
             return True
         if op in ("switch_self", "heal_team") and side.bench:
             return True
+        if op == "attach_from_hand" and any(
+            matches(c, effect.filter or "basic_energy") for c in side.hand
+        ):
+            return True
+        if op == "move_damage" and any(s.damage for s in side.in_play()):
+            return True
+        if op == "place_counters":
+            targets = battle.opponent(index).in_play()
+            if not targets:
+                continue
+            if any(e.op == "ko_self" for e in effects):
+                # Cursed Blast hands over a prize, so it has to take one back.
+                if not any(0 < t.remaining_hp <= effect.n for t in targets):
+                    continue
+            return True
+        if op == "move_energy" and sum(1 for s in side.in_play() if s.energy) > 1:
+            return True
+        if op == "ko_self":
+            continue  # never the reason to use an Ability, only its price
         if op == "opponent_discard_to" and len(battle.opponent(index).hand) > effect.n:
             return True
         if op == "opponent_discard_filter" and any(
@@ -120,6 +139,23 @@ def _apply(battle, index: int, effect: Effect, spot) -> None:
         for card in targets:
             foe.hand.remove(card)
             foe.discard.append(card)
+    elif op == "place_counters":
+        _place_counters(battle, index, effect)
+    elif op == "ko_self":
+        if spot is not None:
+            spot.damage = spot.max_hp
+            battle.check_knockouts()
+    elif op == "move_energy":
+        _move_energy(battle, index, effect.n)
+    elif op == "attach_from_hand":
+        energy = [c for c in side.hand if matches(c, effect.filter or "basic_energy")]
+        target = spot or battle.policies[index].energy_target(battle, index)
+        if energy and target is not None:
+            card = energy[0]
+            side.hand.remove(card)
+            target.energy.append(card)
+    elif op == "move_damage":
+        _move_damage(battle, index, effect.n)
     elif op == "heal_team":
         hurt = [s for s in side.in_play() if s.damage]
         if hurt:
@@ -207,6 +243,54 @@ def _accelerate(battle, index: int, effect: Effect, spot) -> None:
         target.energy.append(card)
     if effect.dest != "discard":
         side.shuffle(battle.rng)
+
+
+def _place_counters(battle, index: int, effect: Effect) -> None:
+    """Put damage counters straight onto the opponent's board."""
+    foe = battle.opponent(index)
+    targets = [foe.active] if effect.dest == "active" and foe.active else foe.in_play()
+    if not targets:
+        return
+    finishable = [s for s in targets if 0 < s.remaining_hp <= effect.n]
+    target = max(finishable, key=lambda s: s.prize_value) if finishable else max(
+        targets, key=lambda s: (s.prize_value, -s.remaining_hp)
+    )
+    battle.damage_spot(1 - index, target, effect.n, source="damage counters")
+
+
+def _move_energy(battle, index: int, count: int) -> None:
+    """Shift Energy to whichever attacker is closest to being paid for."""
+    side = battle.sides[index]
+    policy = battle.policies[index]
+    target = policy.energy_target(battle, index)
+    if target is None:
+        return
+    donors = [s for s in side.in_play() if s is not target and s.energy]
+    for _ in range(count):
+        if not donors:
+            return
+        donor = donors[0]
+        target.energy.append(donor.energy.pop())
+        if not donor.energy:
+            donors.pop(0)
+
+
+def _move_damage(battle, index: int, amount: int) -> None:
+    """Shift damage counters off your board and onto theirs, taking a KO if it is there."""
+    side = battle.sides[index]
+    foe = battle.opponent(index)
+    hurt = [s for s in side.in_play() if s.damage]
+    targets = foe.in_play()
+    if not hurt or not targets:
+        return
+    source = max(hurt, key=lambda s: s.damage)
+    moved = min(amount, source.damage)
+    finishable = [s for s in targets if 0 < s.remaining_hp <= moved]
+    target = max(finishable, key=lambda s: s.prize_value) if finishable else max(
+        targets, key=lambda s: (s.prize_value, -s.remaining_hp)
+    )
+    source.damage -= moved
+    battle.damage_spot(1 - index, target, moved, source="damage counters")
 
 
 def pick_discards(battle, index: int, n: int) -> list[Card]:

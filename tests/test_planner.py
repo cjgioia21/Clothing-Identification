@@ -125,7 +125,7 @@ def test_prizes_taken_dominate_the_score():
 
 # ------------------------------------------------------------------ strength
 def test_the_champion_outplays_the_greedy_policy():
-    """Same decks, same seeds — only the player differs."""
+    """Same decks, same seeds, shipped settings — only the player differs."""
     from .test_battle import DRAGAPULT
     from pokedeck.battle import BattleDeck
     from pokedeck.decklist import parse
@@ -134,11 +134,11 @@ def test_the_champion_outplays_the_greedy_policy():
     deck = parse(DRAGAPULT, name="mirror")
     built = BattleDeck.build(deck, resolve(deck))
     wins = 0
-    games = 24
+    games = 30
     for seed in range(games):
         champion_side = seed % 2
-        champion = ChampionPolicy(rollouts=2, depth=2, seed=seed)
+        champion = ChampionPolicy(seed=seed)  # the settings the tool ships with
         players = (champion, Policy()) if champion_side == 0 else (Policy(), champion)
         result = Battle((built, built), players, random.Random(seed), first=seed % 2).play()
         wins += result.winner == champion_side
-    assert wins >= games * 0.5
+    assert wins >= games * 0.55
