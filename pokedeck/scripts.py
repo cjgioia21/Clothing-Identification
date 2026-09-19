@@ -23,8 +23,18 @@ def matches(card: Card, filter_: str) -> bool:
     return MATCHERS.get(filter_, lambda c: False)(card)
 
 
+def gated(effects, spot) -> bool:
+    """Is a condition printed on the card not met right now?"""
+    for effect in effects:
+        if effect.op == "requires_energy" and not (spot and spot.energy):
+            return True
+    return False
+
+
 def run(battle, index: int, effects, spot=None) -> None:
     """Apply an effect script for the player at ``index``."""
+    if gated(effects, spot):
+        return
     for effect in effects:
         if effect.chance < 100 and battle.rng.randrange(100) >= effect.chance:
             continue  # the coin came down the other way
@@ -33,6 +43,8 @@ def run(battle, index: int, effects, spot=None) -> None:
 
 def useful(battle, index: int, effects, spot=None) -> bool:
     """Would this script do anything right now?"""
+    if gated(effects, spot):
+        return False
     side = battle.sides[index]
     policy = battle.policies[index]
     for effect in effects:
@@ -63,7 +75,9 @@ def useful(battle, index: int, effects, spot=None) -> bool:
             return True
         if op == "attach_energy" and _energy_source(battle, index, effect):
             return True
-        if op in ("switch_self", "heal_team") and side.bench:
+        if op == "switch_self" and policy.wants_switch(battle, index):
+            return True
+        if op == "heal_team" and any(s.damage for s in side.in_play()):
             return True
         if op == "attach_from_hand" and any(
             matches(c, effect.filter or "basic_energy") for c in side.hand
@@ -137,7 +151,10 @@ def _apply(battle, index: int, effect: Effect, spot) -> None:
             foe.discard.append(foe.hand.pop())
     elif op == "opponent_discard_filter":
         foe = battle.opponent(index)
-        targets = [c for c in foe.hand if matches(c, effect.filter)][: effect.n]
+        pool = [c for c in foe.hand if matches(c, effect.filter)]
+        value = battle.policies[1 - index].card_value
+        pool.sort(key=lambda c: value(battle, 1 - index, c), reverse=True)
+        targets = pool[: effect.n]
         for card in targets:
             foe.hand.remove(card)
             foe.discard.append(card)

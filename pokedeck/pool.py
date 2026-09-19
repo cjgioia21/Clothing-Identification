@@ -179,6 +179,7 @@ def _energy(record: dict) -> Card:
     provides = tuple(record.get("types", ()) or ())
     effects, _ = ((), []) if is_basic else compile_ability({"effect": text})[:2]
     wild_if, wild_count = _wildcard_rule(text)
+    bonus_if, bonus_count = _bonus_rule(text)
     if not provides:
         provides = _provided_types(text)
     return Card(
@@ -191,6 +192,9 @@ def _energy(record: dict) -> Card:
         energy_count=2 if "provides 2 {" in text else 1,
         energy_wild_if=wild_if,
         energy_wild_count=wild_count,
+        energy_bonus_if=bonus_if,
+        energy_bonus_count=bonus_count,
+        energy_ends_turn=_ends_turn(text),
         card_id=record.get("id", ""),
         regulation=str(record.get("regulationMark") or ""),
         set_id=str(record.get("set") or ""),
@@ -235,6 +239,28 @@ def _wildcard_rule(text: str) -> tuple[str, int]:
     if plain:
         return "always", int(plain.group(1))
     return "", 1
+
+
+def _bonus_rule(text: str) -> tuple[str, int]:
+    """Energy that provides more than one symbol on the right Pokémon.
+
+    Ignition Energy is one Energy on a Basic and three on an Evolution.
+    """
+    match = re.search(
+        r"if this card is attached to an? (basic|evolution|stage 2) pok.mon,"
+        r"[^.]*?provides (\{\w\})+ energy instead",
+        (text or "").lower(),
+    )
+    if not match:
+        return "", 1
+    span = match.group(0)
+    kind = {"stage 2": "stage2"}.get(match.group(1), match.group(1))
+    return kind, max(1, len(re.findall(r"\{\w\}", span.split("provides", 1)[1])))
+
+
+def _ends_turn(text: str) -> bool:
+    """Energy that goes to the discard pile at the end of the turn it lands."""
+    return bool(re.search(r"discard it at the end of your turn", (text or "").lower()))
 
 
 def _provided_types(text: str) -> tuple[str, ...]:

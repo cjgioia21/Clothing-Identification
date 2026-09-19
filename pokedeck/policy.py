@@ -41,7 +41,45 @@ class Policy:
 
     def best_bench(self, battle, index: int):
         side = battle.sides[index]
-        return max(side.bench, key=lambda s: self.spot_value(battle, index, s))
+        return max(side.bench, key=lambda s: (self.reach(battle, index, s),
+                                              self.spot_value(battle, index, s)))
+
+    def wants_switch(self, battle, index: int) -> bool:
+        """Is there a benched Pokémon that would hit harder from the Active Spot?
+
+        A free Ability switch costs nothing, so the bar is lower than retreat,
+        but shuffling the board every turn for its own sake just puts an empty
+        Pokémon in front of the attacker that was about to swing.
+        """
+        side = battle.sides[index]
+        if side.active is None or not side.bench:
+            return False
+        current = self.reach(battle, index, side.active)
+        best = max(self.reach(battle, index, other) for other in side.bench)
+        if best > current:
+            return True
+        # Or to get out from under a knockout the Active cannot survive.
+        threat = self.incoming(battle, index)
+        if threat < side.active.remaining_hp:
+            return False
+        return any(other.remaining_hp > threat for other in side.bench)
+
+    def incoming(self, battle, index: int) -> int:
+        """The biggest hit the opponent's Active could land on us right now."""
+        foe = battle.opponent(index)
+        spot, target = foe.active, battle.sides[index].active
+        if spot is None or target is None:
+            return 0
+        worst = 0
+        for attack in spot.card.attacks:
+            if not battle.can_pay(spot, attack):
+                continue
+            plan = battle.attack_plan(1 - index, attack, spot, target)
+            raw = battle.attack_damage(1 - index, attack, spot, target, plan)
+            ignore = any(e.op == "ignore_weakness" for e in attack.effects)
+            worst = max(worst, battle.final_damage(raw, spot, target, 1 - index,
+                                                   ignore_weakness=ignore))
+        return worst
 
     def spot_value(self, battle, index: int, spot) -> tuple:
         ready = any(battle.can_pay(spot, a) for a in spot.card.attacks)
@@ -91,8 +129,8 @@ class Policy:
             card = spot.card
             if not card.ability or card.ability_trigger != "turn":
                 continue
-            if spot.ability_used_turn == battle.turn or spot.turn_played == battle.turn:
-                continue
+            if spot.ability_used_turn == battle.turn:
+                continue  # an Ability works the turn it hits the board, but only once
             if not useful(battle, index, card.ability, spot):
                 continue
             spot.ability_used_turn = battle.turn
@@ -135,7 +173,8 @@ class Policy:
                 continue
             side.hand.remove(card)
             side.discard.append(card)
-            run(battle, index, card.effects)
+            if not battle.trainer_taxed(index):
+                run(battle, index, card.effects)
             return True
         return False
 
@@ -161,7 +200,8 @@ class Policy:
             side.hand.remove(card)
             side.discard.append(card)
             side.supporter_used = True
-            run(battle, index, card.effects)
+            if not battle.trainer_taxed(index):
+                run(battle, index, card.effects)
             return True
         return False
 
@@ -251,7 +291,7 @@ class Policy:
 
     def evolution_target(self, battle, index: int, card: Card):
         side = battle.sides[index]
-        ready = [s for s in side.in_play() if s.turn_played < battle.turn]
+        ready = [s for s in side.in_play() if battle.can_evolve(index, s)]
         for spot in ready:
             if spot.name == card.evolves_from:
                 return spot
@@ -354,7 +394,10 @@ class Policy:
             if spot.tool is None:
                 card = tools[0]
                 side.hand.remove(card)
-                spot.tool = card
+                if battle.trainer_taxed(index):
+                    side.discard.append(card)
+                else:
+                    spot.tool = card
                 return True
         return False
 
@@ -367,7 +410,8 @@ class Policy:
                 continue
             side.hand.remove(card)
             side.discard.append(card)
-            run(battle, index, card.effects)
+            if not battle.trainer_taxed(index):
+                run(battle, index, card.effects)
             return True
         return False
 
@@ -379,6 +423,10 @@ class Policy:
                     if c.subtype is Subtype.STADIUM and battle.can_play_stadium(c)]
         if not stadiums:
             return False
+        if battle.trainer_taxed(index):
+            side.hand.remove(stadiums[0])
+            side.discard.append(stadiums[0])
+            return True
         battle.play_stadium(index, stadiums[0])
         return True
 

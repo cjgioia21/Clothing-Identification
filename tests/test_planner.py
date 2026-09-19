@@ -47,7 +47,8 @@ def test_determinizing_keeps_what_the_player_can_see():
 
 
 def test_determinizing_reshuffles_what_it_cannot():
-    battle = played_out()
+    battle = played_out(seed=2)  # a seed where the opponent still holds cards
+    assert battle.sides[1].hand
     hands = {
         tuple(sorted(c.name for c in battle.clone(determinize_for=0, seed=s).sides[1].hand))
         for s in range(6)

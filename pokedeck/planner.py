@@ -50,7 +50,6 @@ def legal_actions(battle, index: int) -> list[Action]:
             and card.ability
             and card.ability_trigger == "turn"
             and spot.ability_used_turn != battle.turn
-            and spot.turn_played < battle.turn
             and useful(battle, index, card.ability, spot)
         ):
             offer("ability", spot=position, key=("ability", card.name, position))
@@ -100,7 +99,7 @@ def legal_actions(battle, index: int) -> list[Action]:
 def _can_evolve_onto(battle, index: int, card: Card, spot) -> bool:
     if card.category is not Category.POKEMON or card.stage is Stage.BASIC:
         return False
-    if spot.turn_played >= battle.turn:
+    if not battle.can_evolve(index, spot):
         return False
     if spot.name == card.evolves_from:
         return True
@@ -175,10 +174,17 @@ def apply_action(battle, index: int, action: Action) -> bool:
 
     if action.kind == "tool":
         side.hand.pop(action.hand)
-        spots[action.spot].tool = card
+        if battle.trainer_taxed(index):
+            side.discard.append(card)
+        else:
+            spots[action.spot].tool = card
         return True
 
     if action.kind == "stadium":
+        if battle.trainer_taxed(index):
+            side.hand.remove(card)
+            side.discard.append(card)
+            return True
         battle.play_stadium(index, card)
         return True
 
@@ -187,7 +193,8 @@ def apply_action(battle, index: int, action: Action) -> bool:
         side.discard.append(card)
         if action.kind == "supporter":
             side.supporter_used = True
-        run(battle, index, card.effects)
+        if not battle.trainer_taxed(index):
+            run(battle, index, card.effects)
         return True
 
     return False

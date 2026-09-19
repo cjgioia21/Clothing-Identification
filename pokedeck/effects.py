@@ -58,6 +58,13 @@ _IGNORABLE = (
     r"this card stays in play",
     r"you can't use more than 1 .* ability",
     r"(?:the|this) effect lasts until",
+    r"choose 1 of your opponent's active pok.mon's attacks",
+    r"your opponent discards that trainer card instead of using it",
+    r"this pok.mon can use the attacks of any of your benched pok.mon",
+    r"as long as this card is attached to a pok.mon, it provides",
+    r"that player shuffles their deck",
+    r"if this card is attached to (?:1 of your|an? [\w ]+?) pok.mon",
+    r"^\(.*\)$",
 )
 
 _PATTERNS: list[tuple[int, re.Pattern, callable]] = []
@@ -517,6 +524,12 @@ def _attack_lock(m):
     return [Effect(op="lock_attack")]
 
 
+@_pattern(r"whenever they try to use a trainer card from their hand,? they flip a coin", priority=28)
+def _trainer_tax(m):
+    """Quaking Fist: every Trainer the opponent plays next turn is a coin flip."""
+    return [Effect(op="tax_trainers", n=50)]
+
+
 # -------------------------------------------------------------------- passives
 @_pattern(r"attacks used by your ([\w' ]+?) pok.mon(?:, except [^,]+,)? do (\d+) more damage to your opponent's active pok.mon", priority=25)
 def _boost_team(m):
@@ -661,6 +674,47 @@ def _heal_bench(m):
 @_pattern(r"if your opponent's basic pok.mon is knocked out by damage from an attack used by this pok.mon,? take (\d+) more prize", priority=26)
 def _extra_prize(m):
     return [Effect(op="extra_prize", n=int(m.group(1)), filter="basic_pokemon")]
+
+
+@_pattern(r"once during your turn,? if this pok.mon has any energy attached,? you may use this ability", priority=28)
+def _needs_energy_attached(m):
+    """Evolutionary Guidance only switches on once the Pokémon is powered."""
+    return [Effect(op="requires_energy")]
+
+
+@_pattern(r"^discard a card you find there", priority=27)
+def _strip_hand_card(m):
+    """Piercing Gaze: the reveal is flavour, the discard is the effect."""
+    return [Effect(op="opponent_discard_filter", n=1, filter="any")]
+
+
+@_pattern(r"this pok.mon can evolve during your first turn or the turn you play it", priority=27)
+def _evolve_early(m):
+    """Fighting Roar and friends lift the usual evolution timing."""
+    condition = "vs_rule_box" if "pok\u00e9mon ex" in m.string.lower() else "any"
+    return [Effect(op="evolve_early", filter=condition)]
+
+
+@_pattern(r"if your opponent has no pok.mon ex or pok.mon v in play,? this pok.mon can't attack", priority=27)
+def _needs_a_target(m):
+    """Born to Slack: a wall that only wakes up against rule-box decks."""
+    return [Effect(op="attack_needs_rule_box")]
+
+
+@_pattern(r"prevent all damage from and effects of attacks from your opponent's ([\w' ]+?) pok.mon done to this pok.mon", priority=27)
+def _prevent_from(m):
+    return [Effect(op="prevent_damage", filter=m.group(1).strip().casefold())]
+
+
+@_pattern(r"search your deck for a basic \{?\w+\}? energy card, a basic \{?\w+\}? energy card, or 1 of each and attach", priority=28)
+def _two_type_accelerate(m):
+    """X-Boot: one of each, so two Energy off the top of the deck."""
+    return [Effect(op="attach_energy", n=2, filter="basic_energy", dest="deck")]
+
+
+@_pattern(r"search (?:your|their) deck for an evolution pok.mon", priority=27)
+def _search_evolution(m):
+    return [Effect(op="search", n=1, filter="evolution")]
 
 
 _WORDS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,

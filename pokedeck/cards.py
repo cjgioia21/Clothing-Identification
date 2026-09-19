@@ -132,6 +132,9 @@ class Card:
     energy_count: int = 1
     energy_wild_if: str = ""   # "", "always", "basic" or "stage2"
     energy_wild_count: int = 1
+    energy_bonus_if: str = ""  # "", "basic", "stage2" or "evolution"
+    energy_bonus_count: int = 1   # how much it provides instead, when it applies
+    energy_ends_turn: bool = False  # discarded at the end of the turn it is used
 
     @property
     def is_basic_pokemon(self) -> bool:
@@ -198,6 +201,9 @@ class Card:
             energy_count=int(raw.get("energy_count", 1)),
             energy_wild_if=raw.get("energy_wild_if", ""),
             energy_wild_count=int(raw.get("energy_wild_count", 1)),
+            energy_bonus_if=raw.get("energy_bonus_if", ""),
+            energy_bonus_count=int(raw.get("energy_bonus_count", 1)),
+            energy_ends_turn=bool(raw.get("energy_ends_turn", False)),
             known=True,
         )
 
@@ -219,7 +225,8 @@ class Card:
                 patch[key] = tuple(Effect.from_dict(e) for e in value)
             elif key == "attacks":
                 patch[key] = tuple(Attack.from_dict(a) for a in value)
-            elif key in ("hp", "retreat", "prize_value", "resistance_value", "energy_count"):
+            elif key in ("hp", "retreat", "prize_value", "resistance_value", "energy_count",
+                         "energy_bonus_count"):
                 patch[key] = int(value)
             elif key in ("ace_spec", "fossil", "plays_first_turn"):
                 patch[key] = bool(value)

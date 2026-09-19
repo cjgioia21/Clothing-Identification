@@ -133,8 +133,25 @@ class Spot:
                 units.extend([_ANY_TYPE] * max(1, card.energy_wild_count))
                 continue
             provided = frozenset(card.energy_provides or ("Colorless",))
-            units.extend([provided] * max(1, card.energy_count))
+            units.extend([provided] * max(1, self._provides(card)))
         return units
+
+    def _provides(self, card: Card) -> int:
+        """How many Energy this card counts as on *this* Pokémon.
+
+        Ignition Energy is one symbol on a Basic and three on an Evolution.
+        """
+        bonus = card.energy_bonus_if
+        stage = self.card.stage
+        if not bonus:
+            return card.energy_count
+        if bonus == "evolution" and stage is not Stage.BASIC:
+            return card.energy_bonus_count
+        if bonus == "basic" and stage is Stage.BASIC:
+            return card.energy_bonus_count
+        if bonus == "stage2" and stage is Stage.STAGE2:
+            return card.energy_bonus_count
+        return card.energy_count
 
     def energy_types(self) -> list[str]:
         """A flat list of what is attached, for counting rather than paying."""
@@ -178,6 +195,8 @@ class Side:
     lost_pokemon: int = 0
     extra_prizes: int = 0
     items_locked_until: int = -1
+    trainer_tax_until: int = -1
+    trainer_tax: int = 0
     locked_attack: str = ""
     locked_attack_until: int = -1
 
@@ -226,6 +245,8 @@ class Side:
         clone.lost_pokemon = self.lost_pokemon
         clone.extra_prizes = self.extra_prizes
         clone.items_locked_until = self.items_locked_until
+        clone.trainer_tax_until = self.trainer_tax_until
+        clone.trainer_tax = self.trainer_tax
         clone.locked_attack = self.locked_attack
         clone.locked_attack_until = self.locked_attack_until
         return clone
@@ -427,6 +448,16 @@ class Battle:
             return
         if self.can_attack(index):
             policy.attack(self, index)
+        self.discard_spent_energy(index)
+
+    def discard_spent_energy(self, index: int) -> None:
+        """Ignition Energy and friends go to the discard when the turn ends."""
+        side = self.sides[index]
+        for spot in side.in_play():
+            keep = [card for card in spot.energy if not card.energy_ends_turn]
+            if len(keep) != len(spot.energy):
+                side.discard.extend(c for c in spot.energy if c.energy_ends_turn)
+                spot.energy = keep
 
     def can_play_supporter(self, index: int, card: Card) -> bool:
         """Supporters are banned on the first turn of the player going first."""
@@ -446,7 +477,33 @@ class Battle:
         spot = side.active
         if spot.condition in (ASLEEP, PARALYZED):
             return False
+        if self.attacks_barred(index, spot):
+            return False
         return spot.blocked_until < self.turn
+
+    def attacks_barred(self, index: int, spot: Spot) -> bool:
+        """Born to Slack: no rule-box Pokémon across the table, no attack."""
+        if self.abilities_locked(index):
+            return False
+        if not any(e.op == "attack_needs_rule_box" for e in spot.card.ability):
+            return False
+        return not any(other.card.rule_box for other in self.opponent(index).in_play())
+
+    def can_evolve(self, index: int, spot: Spot) -> bool:
+        """Evolution normally waits a turn; an Ability can waive that."""
+        if spot.turn_played < self.turn:
+            return True
+        if self.abilities_locked(index):
+            return False
+        for effect in spot.card.ability:
+            if effect.op != "evolve_early":
+                continue
+            if effect.filter != "vs_rule_box":
+                return True
+            foe = self.opponent(index).active
+            if foe is not None and foe.card.rule_box:
+                return True
+        return False
 
     # ------------------------------------------------------------- turn end
     def between_turns(self, index: int) -> None:
@@ -637,6 +694,18 @@ class Battle:
     def items_locked(self, index: int) -> bool:
         return self.sides[index].items_locked_until >= self.turn
 
+    def trainer_taxed(self, index: int) -> bool:
+        """Quaking Fist: flip for the Trainer being played. Tails, it is lost.
+
+        Called as the card leaves the hand, so a tails result discards it
+        without running its effects — and still spends the Supporter for the
+        turn, because the card was played.
+        """
+        side = self.sides[index]
+        if side.trainer_tax_until < self.turn or side.trainer_tax <= 0:
+            return False
+        return self.rng.randrange(100) < side.trainer_tax
+
     def attack_blocked(self, index: int, attack: Attack) -> bool:
         side = self.sides[index]
         return side.locked_attack == attack.name and side.locked_attack_until >= self.turn
@@ -693,6 +762,27 @@ class Battle:
                 return 0
         return cost
 
+    def immune(self, target: Spot, attacker: Spot, defender_index: int) -> bool:
+        """An Ability that blanks attacks from a particular kind of Pokémon.
+
+        The card pool carries no Tera flag, so a shield printed against Tera
+        Pokémon matches nothing — the audit reports that as a data gap rather
+        than pretending the shield fires.
+        """
+        if self.abilities_locked(defender_index):
+            return False
+        for effect in target.card.ability:
+            if effect.op != "prevent_damage":
+                continue
+            want = effect.filter
+            if want in ("any", ""):
+                return True
+            if want in (t.casefold() for t in attacker.card.types):
+                return True
+            if want == "basic" and attacker.card.is_basic_pokemon:
+                return True
+        return False
+
     def sheltered(self, attacker: Spot, target: Spot) -> bool:
         """Is the target behind a Stadium that blanks rule-box attackers?"""
         if self.stadium is None:
@@ -720,6 +810,8 @@ class Battle:
             return 0
         if index is None:
             index = 0 if spot in self.sides[0].in_play() else 1
+        if self.immune(target, spot, 1 - index):
+            return 0
 
         damage = raw + self.damage_boost(index, spot, target)
         if not ignore_weakness:
@@ -799,6 +891,9 @@ class Battle:
                     self.damage_spot(1 - index, other, effect.n, source="spread")
         elif op == "lock_items":
             foe.items_locked_until = self.turn + 1
+        elif op == "tax_trainers":
+            foe.trainer_tax_until = self.turn + 1
+            foe.trainer_tax = effect.n
         elif op == "lock_attack":
             best = max(target.card.attacks, key=lambda a: a.damage, default=None)
             if best is not None:
