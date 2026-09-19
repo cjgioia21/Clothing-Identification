@@ -204,8 +204,19 @@ ALL_ENERGY_TYPES = (
 )
 
 
+# A basic Energy is named for the type it provides and nothing else. TCGdex
+# marks several Special Energy as energyType "Normal" — Prism, Reversal,
+# Ignition, Team Rocket's and the flavoured ones — and taking that at face
+# value exempts them from rotation and from the four-copy rule, lets a search
+# for "a Basic Energy card" fetch them, and drops their printed effects.
+_BASIC_ENERGY_NAME = re.compile(
+    r"^(?:basic )?(grass|fire|water|lightning|psychic|fighting|darkness|metal|dragon|"
+    r"colorless|fairy) energy$"
+)
+
+
 def _energy(record: dict) -> Card:
-    is_basic = (record.get("energyType") == "Normal") or record["name"].startswith("Basic ")
+    is_basic = bool(_BASIC_ENERGY_NAME.match(record["name"].casefold()))
     text = record.get("effect") or ""
     provides = tuple(record.get("types", ()) or ())
     effects, _ = ((), []) if is_basic else compile_ability({"effect": text})[:2]

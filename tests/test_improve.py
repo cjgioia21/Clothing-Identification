@@ -117,3 +117,24 @@ def test_basics_trainers_and_energy_are_always_candidates(deck, pool):
 def test_the_scan_covers_hundreds_of_cards(deck, pool):
     names, _ = candidates(deck, resolve(deck), pool)
     assert len(names) > 400
+
+
+def test_a_swap_never_writes_a_rotated_print(pool):
+    """pool.lookup can return a rotated print even when a legal one exists."""
+    loaded = parse(DECK, name="small")
+    for add in ("Rare Candy", "Buddy-Buddy Poffin", "Boss's Orders"):
+        built = variant(loaded, "Pokégear 3.0", add, pool)
+        assert built is not None, add
+        entry = next(e for e in built.entries if e.name == add)
+        card = pool.lookup(add, entry.set_code, entry.number)
+        from pokedeck.legality import card_is_legal
+        assert card_is_legal(card), f"{add} {entry.set_code} {entry.number}"
+
+
+def test_a_card_with_no_legal_print_is_refused(pool):
+    """Reversal Energy has rotated: every print of it is regulation mark G."""
+    assert all(p.regulation == "G" for p in pool.prints("Reversal Energy"))
+    loaded = parse(DECK, name="small")
+    assert variant(loaded, "Pokégear 3.0", "Reversal Energy", pool) is None
+    names, _ = candidates(loaded, resolve(loaded), pool)
+    assert "Reversal Energy" not in names

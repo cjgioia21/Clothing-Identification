@@ -96,3 +96,49 @@ def test_the_repair_does_not_invent_a_line():
     for card in pool.by_print.values():
         if card.evolves_from:
             assert any(p.evolves_from for p in pool.prints(card.name))
+
+
+# -------------------------------------------------- basic vs Special Energy
+BASIC_ENERGY = [
+    "Basic Fire Energy", "Fire Energy", "Basic Psychic Energy", "Water Energy",
+]
+SPECIAL_ENERGY = [
+    "Prism Energy", "Reversal Energy", "Ignition Energy", "Team Rocket's Energy",
+    "Telepathic Psychic Energy", "Growing Grass Energy", "Rocky Fighting Energy",
+]
+
+
+def test_basic_energy_is_named_for_its_type_and_nothing_else():
+    pool = load_pool()
+    for name in BASIC_ENERGY:
+        card = pool.lookup(name)
+        assert card is not None, name
+        assert card.is_basic_energy, name
+
+
+def test_special_energy_is_not_taken_for_basic():
+    """TCGdex marks several Special Energy as energyType "Normal".
+
+    Believing it exempts them from rotation and from the four-copy rule, lets
+    a search for "a Basic Energy card" fetch them, and drops their printed
+    effects — Reversal Energy passed a Standard-legality check that way.
+    """
+    pool = load_pool()
+    for name in SPECIAL_ENERGY:
+        card = pool.lookup(name)
+        assert card is not None, name
+        assert not card.is_basic_energy, name
+
+
+def test_a_rotated_special_energy_is_not_legal():
+    pool = load_pool()
+    from pokedeck.legality import card_is_legal
+    reversal = pool.lookup("Reversal Energy")
+    assert all(p.regulation == "G" for p in pool.prints("Reversal Energy"))
+    assert not card_is_legal(reversal)
+
+
+def test_special_energy_keeps_the_effects_it_prints():
+    pool = load_pool()
+    assert [e.op for e in pool.lookup("Telepathic Psychic Energy").effects] == ["search"]
+    assert [e.op for e in pool.lookup("Growing Grass Energy").effects] == ["hp_boost"]

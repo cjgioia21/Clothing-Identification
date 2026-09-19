@@ -66,7 +66,7 @@ def variant(deck: Deck, cut: str, add: str, pool, count: int = 1) -> Deck | None
         return None
     entries = [e for e in entries if e.count > 0]
 
-    card = pool.lookup(add)
+    card = _legal_print(pool, add)
     if card is None:
         return None
     limit = BASIC_ENERGY_LIMIT if card.is_basic_energy else MAX_COPIES
@@ -84,6 +84,19 @@ def variant(deck: Deck, cut: str, add: str, pool, count: int = 1) -> Deck | None
         return None
     built = Deck(entries=entries, name=f"-{count} {cut} +{count} {add}")
     return built if built.size == deck.size else None
+
+
+def _legal_print(pool, name: str):
+    """The Standard-legal print of a card, if it has one.
+
+    pool.lookup returns whichever print sorts first, which can be a rotated
+    one — so a scan that qualified a card on a legal print could still write
+    an illegal print into the deck it suggests.
+    """
+    prints = pool.prints(name)
+    if not prints:
+        return None
+    return next((c for c in prints if card_is_legal(c)), None)
 
 
 def _print_of(card) -> tuple[str | None, str | None]:
