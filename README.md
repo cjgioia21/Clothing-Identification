@@ -175,16 +175,18 @@ understands the card text the compiler could read. It plays a clean, tactical
 game and it does not misplay the obvious things — that is the honest ceiling
 here.
 
-Across the hundred field decks, **97% of distinct cards are fully modelled** —
-every line of their printed text turned into rules. The rest is reported, never
-guessed at.
+Across the hundred field decks, **100% of distinct cards are fully modelled** —
+every line of their printed text turned into rules, checked by
+`tools/audit_cards.py`, which puts each card into a controlled game, uses it,
+and reports anything that changed nothing. Pool-wide, 61% of Standard-legal
+cards read end to end; the rest is reported, never guessed at.
 
 **Not modelled:** the Lost Zone, attack choices that depend on reading the
-opponent, a handful of card-specific riders (a Pokémon that may only attack
-while the opponent has an ex in play, prize-count clauses on a knockout), and
-any text the compiler could not parse. Nothing is silently invented: an
-unreadable rider just does not fire, and the coverage line in every report
-tells you how much of your deck was taken literally.
+opponent, Tera Pokémon (TCGdex carries no Tera marking, so a shield printed
+against them matches nothing), and any text the compiler could not parse.
+Nothing is silently invented: an unreadable rider just does not fire, and the
+coverage line in every report tells you how much of your deck was taken
+literally.
 
 ```
   card text modelled  95.0%
