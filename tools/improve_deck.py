@@ -231,21 +231,27 @@ def main() -> int:
     note(f"{worth_games} games each, baseline {base_worth:.1%} "
          f"±{margin(base_worth, worth_games):.1%}")
     losses: list[tuple[float, str]] = []
+    seen: set[str] = set()
     for entry in deck.entries:
-        if entry.name == filler:
+        # A list can name the same card on two lines, for two printings of it.
+        if entry.name == filler or entry.name in seen:
             continue
+        seen.add(entry.name)
         thinner = variant(deck, entry.name, filler, pool)
         if thinner is None:
             continue
         rate, _, _ = measure(thinner, field, worth_n, args.seed, args.workers, args.policy)
         losses.append((rate - base_worth, entry.name))
     losses.sort(reverse=True)
+    worth_noise = margin(base_worth, worth_games)
     note("\n  the deck misses these least")
     for delta, name in losses[:args.cuts]:
-        note(f"  {delta:+6.1%}  without 1 {name}")
+        flag = "" if abs(delta) > worth_noise else "   (inside the noise)"
+        note(f"  {delta:+6.1%}  without 1 {name}{flag}")
     note("  ... and these most")
     for delta, name in losses[-3:]:
-        note(f"  {delta:+6.1%}  without 1 {name}")
+        flag = "" if abs(delta) > worth_noise else "   (inside the noise)"
+        note(f"  {delta:+6.1%}  without 1 {name}{flag}")
     cuts = [name for _, name in losses[:args.cuts]]
 
     # ---- stage one: every candidate, against the weakest card
