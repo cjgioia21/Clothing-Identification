@@ -59,3 +59,40 @@ def test_prints_lists_every_version():
     prints = load_pool().prints("Charizard ex")
     assert len(prints) > 1
     assert all(p.name == "Charizard ex" for p in prints)
+
+
+# ------------------------------------------------- gaps in the printed data
+def test_an_evolution_print_missing_its_line_borrows_it_from_another_print():
+    """The 30th Anniversary Seismitoad ships with no "Evolves from".
+
+    Without this repair the card is unreachable: Palpitoad sits under it and
+    the engine has nothing telling it the two go together, so a deck built
+    around Seismitoad never plays one.
+    """
+    pool = load_pool()
+    card, exact = pool.lookup_print("Seismitoad", "30C", "84")
+    assert exact and card.card_id == "30th-084"
+    assert card.evolves_from == "Palpitoad"
+    assert all(p.evolves_from == "Palpitoad" for p in pool.prints("Seismitoad"))
+
+
+def test_every_evolution_in_the_pool_has_something_to_evolve_from():
+    pool = load_pool()
+    orphans = {
+        card.name
+        for card in pool.by_print.values()
+        if card.category is Category.POKEMON
+        and card.stage is not Stage.BASIC
+        and not card.evolves_from
+        # A card whose every print lacks the field has nothing to borrow.
+        and any(p.evolves_from for p in pool.prints(card.name))
+    }
+    assert not orphans, sorted(orphans)
+
+
+def test_the_repair_does_not_invent_a_line():
+    """A card with no pre-evolution on any print is left exactly as printed."""
+    pool = load_pool()
+    for card in pool.by_print.values():
+        if card.evolves_from:
+            assert any(p.evolves_from for p in pool.prints(card.name))

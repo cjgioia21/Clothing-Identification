@@ -11,7 +11,7 @@ from __future__ import annotations
 import gzip
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from importlib import resources
 
@@ -105,7 +105,38 @@ def load_pool() -> Pool:
             by_print[(set_id, local)] = card
     for prints in by_name.values():
         prints.sort(key=_print_rank)
+    _fill_evolution_gaps(by_name, by_print)
     return Pool(by_name=by_name, by_print=by_print)
+
+
+def _fill_evolution_gaps(by_name: dict[str, list[Card]],
+                         by_print: dict[tuple[str, str], Card]) -> None:
+    """Give an evolution print the pre-evolution its other prints name.
+
+    Some sets — the anniversary ones above all — ship without the "Evolves
+    from" field, and an Evolution with nothing to evolve from can never be
+    played: the 30th Anniversary Seismitoad could not be reached from the
+    Palpitoad sitting under it. Every print of a card is the same Pokémon, so
+    the line is taken from whichever print does carry it. Nothing is invented —
+    a card whose prints all lack the field is left alone.
+    """
+    repaired: dict[int, Card] = {}
+    for prints in by_name.values():
+        source = next((p.evolves_from for p in prints if p.evolves_from), None)
+        if source is None:
+            continue
+        for index, card in enumerate(prints):
+            if (card.category is Category.POKEMON and card.stage is not Stage.BASIC
+                    and not card.evolves_from):
+                fixed = replace(card, evolves_from=source)
+                repaired[id(card)] = fixed
+                prints[index] = fixed
+    if not repaired:
+        return
+    for key, card in list(by_print.items()):
+        fixed = repaired.get(id(card))
+        if fixed is not None:
+            by_print[key] = fixed
 
 
 def to_card(record: dict) -> Card:
