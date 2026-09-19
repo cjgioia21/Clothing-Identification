@@ -276,6 +276,12 @@ def main() -> int:
             ahead = sum(1 for t in found if t.delta > 0)
             note(f"  {position}/{len(adds)} tried — {ahead} ahead of the baseline")
     found.sort(key=lambda t: -t.delta)
+    ahead = sum(1 for t in found if t.delta > 0)
+    if ahead > len(found) * 0.6:
+        note(f"  note: {ahead}/{len(found)} beat the baseline, which is too many to be "
+             f"the cards —\n  cutting 1 {lead_cut} is an improvement on its own, and every "
+             f"variant starts there.\n  The ranking is still sound; the final table splits "
+             f"the cut from the card.")
     shortlist = [t for t in found if t.delta > 0][:args.shortlist]
     if not shortlist:
         note("\nNothing beat the deck as it stands.")
@@ -330,11 +336,30 @@ def main() -> int:
         rows.append(trial)
     rows.sort(key=lambda t: -t.delta)
 
+    # How much of each swap is the cut rather than the card being added? Every
+    # variant starts from "the deck minus that card", and if the cut is itself
+    # an improvement then a candidate that does nothing still looks good.
+    cut_only: dict[str, float] = {}
+    for cut in {t.cut for t in rows}:
+        thinned = variant(deck, cut, filler, pool)
+        if thinned is None:
+            continue
+        rate, _, _ = measure(thinned, field, final_n, args.seed + 3,
+                             args.workers, args.policy)
+        cut_only[cut] = rate
+
     noise = margin(base_full, base_games)
-    note(f"  {'change':>7}  {'after':>6}   swap")
+    note(f"  {'swap':>7}  {'card':>6}  {'after':>6}   change")
     for trial in rows:
+        alone = cut_only.get(trial.cut)
+        share = f"{trial.win_rate - alone:+6.1%}" if alone is not None else "     ?"
         flag = "" if abs(trial.delta) > noise else "   (inside the noise)"
-        note(f"  {trial.delta:+7.1%}  {trial.win_rate:6.1%}   {trial.label}{flag}")
+        note(f"  {trial.delta:+7.1%}  {share}  {trial.win_rate:6.1%}   {trial.label}{flag}")
+    note("\n  swap = against the deck as it stands;  "
+         "card = against the same deck with that\n  cut already made and a "
+         f"{filler} in its place, which is what the added card is\n  actually worth")
+    for cut, rate in sorted(cut_only.items(), key=lambda kv: -kv[1]):
+        note(f"    -1 {cut} for a {filler} alone: {rate:.1%} ({rate - base_full:+.1%})")
 
     real = [t for t in rows if t.delta > noise]
     if real:
