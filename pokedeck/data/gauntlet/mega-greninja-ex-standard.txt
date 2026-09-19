@@ -1,0 +1,34 @@
+# Mega Greninja ex (standard)
+
+Pokémon: 14
+4 Froakie CHR 20
+2 Frogadier CHR 21
+3 Mega Greninja ex CHR 22
+2 Munkidori PRE 44
+1 Fezandipiti ex SFA 38
+1 Budew PRE 4
+1 Mew ex 30TH 66
+
+Trainer: 36
+2 Battle Cage PHF 85
+3 Rare Candy MEG 125
+4 Buddy-Buddy Poffin PRE 101
+4 Poké Pad PFO 81
+4 Ultra Ball MEG 131
+4 Lillie's Determination MEG 119
+2 Boss's Orders MEG 114
+2 Night Stretcher SFA 61
+2 Switch PHF 123
+2 Pokégear 3.0 BLK 84
+2 Crispin PRE 105
+1 Judge PFO 76
+1 Eri PRE 136
+1 Xerosic's Machinations SFA 64
+1 Unfair Stamp TWM 165
+1 Energy Search PFO 72
+
+Energy: 10
+8 Basic Water Energy
+2 Prism Energy BLK 86
+
+Total Cards: 60

@@ -1,0 +1,29 @@
+# Mega Kangaskhan ex (aggro)
+
+Pokémon: 14
+4 Mega Kangaskhan ex MEP 25
+3 Teal Mask Ogerpon ex PRE 12
+3 Latias ex SSP 76
+2 Meowth ex PFO 62
+1 Fezandipiti ex SFA 38
+1 Budew PRE 4
+
+Trainer: 32
+4 Area Zero Underdepths PRE 94
+4 Energy Switch PBL 107
+4 Ultra Ball MEG 131
+4 Poké Pad PFO 81
+4 Buddy-Buddy Poffin PRE 101
+3 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+2 Crispin PRE 105
+2 Switch PHF 123
+2 Night Stretcher SFA 61
+
+Energy: 14
+8 Basic Grass Energy
+3 Prism Energy BLK 86
+2 Basic Fighting Energy
+1 Enriching Energy SSP 191
+
+Total Cards: 60

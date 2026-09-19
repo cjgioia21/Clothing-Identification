@@ -1,0 +1,30 @@
+# Festival Lead (aggro)
+
+Pokémon: 19
+4 Applin PRE 9
+4 Dipplin PRE 10
+4 Grookey TWM 14
+3 Thwackey TWM 15
+1 Budew PRE 4
+1 Fezandipiti ex SFA 38
+1 Goldeen PBL 13
+1 Seaking PBL 14
+
+Trainer: 33
+2 Festival Grounds PRE 108
+4 Night Stretcher SFA 61
+1 Sacred Ash PFO 115
+4 Ultra Ball MEG 131
+4 Poké Pad PFO 81
+4 Buddy-Buddy Poffin PRE 101
+3 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+3 Energy Switch PBL 107
+2 Crispin PRE 105
+2 Switch PHF 123
+1 Energy Search PFO 72
+
+Energy: 8
+8 Basic Grass Energy
+
+Total Cards: 60

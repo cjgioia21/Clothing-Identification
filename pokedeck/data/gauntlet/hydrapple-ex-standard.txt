@@ -1,0 +1,29 @@
+# Hydrapple ex (standard)
+
+Pokémon: 16
+4 Applin PRE 9
+3 Dipplin PRE 10
+3 Hydrapple ex PRE 11
+3 Teal Mask Ogerpon ex PRE 12
+1 Fezandipiti ex SFA 38
+1 Budew PRE 4
+1 Mew ex 30TH 66
+
+Trainer: 32
+2 Bug Catching Set PRE 102
+2 Forest of Vitality PFO 109
+3 Rare Candy MEG 125
+4 Buddy-Buddy Poffin PRE 101
+4 Poké Pad PFO 81
+4 Ultra Ball MEG 131
+4 Lillie's Determination MEG 119
+2 Boss's Orders MEG 114
+2 Night Stretcher SFA 61
+2 Switch PHF 123
+2 Pokégear 3.0 BLK 84
+1 Crispin PRE 105
+
+Energy: 12
+12 Basic Grass Energy
+
+Total Cards: 60

@@ -1,0 +1,30 @@
+# A pre-rotation list: every card here is regulation mark G, so `pokedeck check`
+# reports it as illegal in Standard. Kept as an example of that warning.
+Pokémon: 13
+4 Charmander PAF 7
+1 Charmeleon PAF 8
+3 Charizard ex OBF 125
+2 Pidgey MEW 16
+2 Pidgeot ex OBF 164
+1 Fezandipiti ex SFA 38
+
+Trainer: 34
+4 Professor's Research SVI 189
+3 Iono PAL 185
+2 Boss's Orders PAL 172
+1 Arven OBF 186
+4 Ultra Ball SVI 196
+4 Rare Candy SVI 191
+4 Nest Ball SVI 181
+3 Buddy-Buddy Poffin TEF 144
+2 Super Rod PAL 188
+2 Counter Catcher PAR 160
+2 Switch SVI 194
+1 Night Stretcher SFA 61
+2 Artazon PAL 171
+
+Energy: 13
+9 Basic Fire Energy SVE 2
+4 Basic Water Energy SVE 3
+
+Total Cards: 60

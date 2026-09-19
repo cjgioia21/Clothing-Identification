@@ -1,0 +1,37 @@
+Pokémon: 8
+1 Budew PRE 4
+4 Tympole BLK 19
+1 Tirtouga BLK 22
+1 Tirtouga BLK 106
+3 Seismitoad 30C 84
+2 Mew ex 30C 152
+1 Budew ASC 221
+1 Palpitoad BLK 20
+
+Trainer: 18
+2 Rare Candy SVI 256
+2 Xerosic's Machinations SFA 64
+2 Antique Cover Fossil SCR 129
+2 Ultra Ball PLF 122
+1 Eri TEF 146
+2 Pokégear 3.0 BLK 84
+1 Boss's Orders ASC 256
+3 Poké Pad POR 81
+2 Rare Candy MEG 175
+2 Night Stretcher SSP 251
+2 Fossil Quarry PBL 76
+4 Buddy-Buddy Poffin MEG 167
+1 Hilda WHT 171
+2 Switch PFL 123
+1 Gwynn PBL 109
+1 Poké Pad POR 81
+4 Lillie's Determination MEG 184
+1 Neutralization Zone SFA 60
+
+Energy: 4
+5 Basic {F} Energy MEE 14
+3 Basic {W} Energy MEE 11
+1 Ignition Energy PFL 124
+2 Prism Energy ASC 216
+
+Total Cards: 60

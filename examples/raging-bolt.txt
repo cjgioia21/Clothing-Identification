@@ -1,0 +1,30 @@
+Pokémon: 8
+4 Raging Bolt ex TEF 123
+2 Teal Mask Ogerpon ex TWM 25
+1 Fezandipiti ex ASH 142
+1 Munkidori ASH 99
+
+Trainer: 40
+4 Carmine TWM 145
+3 Lacey SCR 139
+2 Lucian TWM 157
+3 Cheren ASH 258
+2 Boss's Orders MEG 114
+1 Crispin SCR 133
+1 Judge PFO 76
+4 Ultra Ball MEG 131
+3 Buddy-Buddy Poffin MEG 167
+2 Night Stretcher MEG 173
+2 Switch MEG 130
+2 Pokégear 3.0 BLK 84
+2 Rescue Board TEF 159
+3 Poké Pad ASH 198
+1 Energy Search Pro SSP 176
+2 Pokémon Catcher PFO 82
+3 Energy Retrieval CHR 108
+
+Energy: 12
+7 Basic Lightning Energy
+5 Basic Fighting Energy
+
+Total Cards: 60

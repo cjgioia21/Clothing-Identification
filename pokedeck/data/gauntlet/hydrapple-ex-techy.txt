@@ -1,0 +1,28 @@
+# Hydrapple ex (techy)
+
+Pokémon: 16
+4 Applin PRE 9
+3 Dipplin PRE 10
+3 Hydrapple ex PRE 11
+3 Teal Mask Ogerpon ex PRE 12
+1 Fezandipiti ex SFA 38
+2 Budew PRE 4
+
+Trainer: 32
+2 Bug Catching Set PRE 102
+2 Forest of Vitality PFO 109
+3 Rare Candy MEG 125
+4 Buddy-Buddy Poffin PRE 101
+4 Poké Pad PFO 81
+3 Ultra Ball MEG 131
+3 Lillie's Determination MEG 119
+4 Crushing Hammer PFO 71
+2 Xerosic's Machinations SFA 64
+2 Eri PRE 136
+2 Boss's Orders MEG 114
+1 Night Stretcher SFA 61
+
+Energy: 12
+12 Basic Grass Energy
+
+Total Cards: 60

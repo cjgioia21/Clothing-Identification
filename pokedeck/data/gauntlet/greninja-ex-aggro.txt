@@ -1,0 +1,31 @@
+# Greninja ex (aggro)
+
+Pokémon: 15
+4 Froakie CHR 20
+2 Frogadier CHR 21
+4 Greninja ex SCR 41
+2 Munkidori PRE 44
+1 Fezandipiti ex SFA 38
+1 Budew PRE 4
+1 Mew ex 30TH 66
+
+Trainer: 35
+2 Battle Cage PHF 85
+3 Rare Candy MEG 125
+4 Ultra Ball MEG 131
+4 Poké Pad PFO 81
+4 Buddy-Buddy Poffin PRE 101
+3 Lillie's Determination MEG 119
+3 Boss's Orders MEG 114
+3 Energy Switch PBL 107
+2 Crispin PRE 105
+2 Switch PHF 123
+2 Night Stretcher SFA 61
+2 Energy Search PFO 72
+1 Prime Catcher PRE 119
+
+Energy: 10
+8 Basic Water Energy
+2 Prism Energy BLK 86
+
+Total Cards: 60
