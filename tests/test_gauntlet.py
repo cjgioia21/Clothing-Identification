@@ -95,6 +95,8 @@ def test_a_deck_of_blanks_loses_to_the_field():
 
     deck = parse(text, name="blanks")
     resolution = resolve(deck)
-    report = run_gauntlet(deck, resolution, load_field(5), games_per_deck=4, seed=6, policy="greedy")
-    assert report.win_rate < 0.25
+    report = run_gauntlet(deck, resolution, load_field(6), games_per_deck=6, seed=6, policy="greedy")
+    # It cannot take a prize; it only ever wins by the opponent stalling out.
+    assert report.prize_margin < -2.0
+    assert report.win_rate < 0.4
     assert "Glitchmon" in report.unknown_cards

@@ -19,16 +19,26 @@ _HEADERS = {
     "energy": Category.ENERGY,
 }
 
+# Set codes are usually letters (SVI, TWM) but anniversary sets number them
+# too (30C), and promos hyphenate (PR-SV).
 _LINE = re.compile(
     r"""^\s*
     (?P<count>\d+)         \s+
     (?P<name>.+?)
-    (?:\s+(?P<set>[A-Z]{2,4}|PR-[A-Z]{2,4})\s+(?P<number>[A-Za-z0-9]+))?
+    (?:\s+(?P<set>[A-Z][A-Z0-9]{1,4}|\d{1,2}[A-Z]{1,3}|PR-[A-Z]{2,4})\s+(?P<number>[A-Za-z0-9]+))?
     \s*$""",
     re.VERBOSE,
 )
 
 _BASIC_ENERGY = re.compile(r"^basic\s+(.+?)\s+energy$", re.IGNORECASE)
+
+# PTCG Live writes Energy types as symbols; decklists mix both spellings.
+ENERGY_SYMBOLS = {
+    "{G}": "Grass", "{R}": "Fire", "{W}": "Water", "{L}": "Lightning",
+    "{P}": "Psychic", "{F}": "Fighting", "{D}": "Darkness", "{M}": "Metal",
+    "{C}": "Colorless", "{N}": "Dragon", "{Y}": "Fairy",
+}
+ENERGY_TYPES = frozenset(ENERGY_SYMBOLS.values())
 
 
 class DecklistError(ValueError):
@@ -45,7 +55,8 @@ def parse(text: str, name: str = "deck") -> Deck:
     """Parse a decklist export into a :class:`Deck`.
 
     Category headers ("Pokémon: 12") are used when present; otherwise the
-    category is guessed from the card name.
+    category is guessed from the card name. A header's own count is kept so
+    :func:`validate` can point out when it disagrees with the lines below it.
     """
     deck = Deck(name=name)
     current = None
@@ -55,7 +66,9 @@ def parse(text: str, name: str = "deck") -> Deck:
             continue
         header = _match_header(line)
         if header is not None:
-            current = header
+            current, claimed = header
+            if claimed is not None:
+                deck.header_counts[current] = claimed
             continue
         if line.lower().startswith("total cards"):
             continue
@@ -119,6 +132,14 @@ def validate(deck: Deck) -> list[Issue]:
 
     if not any(e.category is Category.POKEMON for e in deck.entries):
         issues.append(Issue("error", "deck contains no Pokémon"))
+
+    for category, claimed in deck.header_counts.items():
+        actual = sum(e.count for e in deck.entries if e.category is category)
+        if actual != claimed:
+            issues.append(Issue(
+                "warning",
+                f"the {category.value} header says {claimed} but the lines below it add up to {actual}",
+            ))
     return issues
 
 
@@ -126,15 +147,29 @@ def is_basic_energy_name(name: str) -> bool:
     return bool(_BASIC_ENERGY.match(name.strip()))
 
 
-def _match_header(line: str) -> Category | None:
+def _match_header(line: str) -> tuple[Category, int | None] | None:
     """Recognise category headers such as "Pokémon: 12" or "Energy (14)"."""
     head = re.sub(r"[:\-]?\s*\(?\d*\)?\s*$", "", line).strip().lower()
-    return _HEADERS.get(head)
+    category = _HEADERS.get(head)
+    if category is None:
+        return None
+    claimed = re.search(r"(\d+)\s*\)?\s*$", line)
+    return category, int(claimed.group(1)) if claimed else None
 
 
 def _normalise_name(name: str) -> str:
-    name = name.strip()
-    name = re.sub(r"\s+", " ", name)
+    """Tidy a card name and settle the two ways Energy gets written.
+
+    "Basic {F} Energy" and "Fighting Energy" both mean the card the pool calls
+    "Basic Fighting Energy".
+    """
+    name = re.sub(r"\s+", " ", name.strip())
+    for symbol, kind in ENERGY_SYMBOLS.items():
+        if symbol in name:
+            name = name.replace(symbol, kind)
+    words = name.split()
+    if len(words) == 2 and words[1].lower() == "energy" and words[0].capitalize() in ENERGY_TYPES:
+        return f"Basic {words[0].capitalize()} Energy"
     return name
 
 

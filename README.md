@@ -47,6 +47,9 @@ Worst 6 matchups
 If your own list is not Standard-legal the report says so and plays it anyway —
 the field stays legal, so you are told what you are measuring.
 
+`--decks N` takes an even spread across the field rather than the first N
+files, so a short run still meets every archetype.
+
 Both sides are played by the searching player by default, which takes a few
 minutes for a thousand games across four cores; `--policy greedy` swaps in the
 heuristic player and finishes in about ten seconds when you just want a smoke
@@ -85,6 +88,13 @@ Every game is played out properly, by the same player on both sides:
 - **Knockouts and winning** — prizes taken by rule-box value (ex and V take two,
   Mega Evolution ex and VMAX three), promotion from the Bench, and all three win
   conditions: six prizes, no Pokémon left, or an empty deck on the draw step.
+- **Stadiums** — the once-a-turn ability each player may use (Fossil Quarry,
+  Artazon, Lumiose City) and the ones that prevent damage, such as
+  Neutralization Zone blanking attacks from the opponent's ex and V.
+- **Fossils** — Trainers played as 60 HP Basics that cannot retreat, searchable
+  by the cards that name them and evolvable by the Pokémon above them.
+- **Borrowed attacks** — a Pokémon whose Ability lets it use the attacks of
+  your Benched Pokémon, paid for with its own Energy.
 
 ## The player
 
@@ -231,11 +241,53 @@ $ pokedeck odds examples/dragapult.txt --card "Rare Candy" --turns 2
 `pokedeck hand deck.txt -n 5` deals sample opening hands;
 `pokedeck compare a.txt b.txt --goal "..."` lines two lists up on the same goals.
 
+## The desktop app
+
+The same tool ships as a single executable with nothing to install — no Python,
+no `pip`. `packaging/pokedeck.spec` builds it with PyInstaller, and
+`.github/workflows/build-exe.yml` builds `pokedeck.exe` on Windows (plus Linux
+and macOS binaries) on every tag, runs the test suite and a smoke test against
+the real binary, and attaches the results to the release.
+
+Build one yourself on the platform you want it for:
+
+```bash
+pip install pyinstaller
+pyinstaller packaging/pokedeck.spec      # dist/pokedeck.exe on Windows
+```
+
+Double-clicking the executable opens a menu — point it at a decklist and pick
+what to run:
+
+```
+  pokedeck — Pokemon TCG deck tester
+  ------------------------------------------------
+  Plays your deck against 100 Standard-legal decks.
+
+  Decklist: C:\Users\me\Desktop\my-deck.txt
+
+  Loaded my-deck.txt — 60 cards
+
+  1) Check the deck (legality, composition, opening-hand odds)
+  2) Play the gauntlet — 100 decks, 10 games each
+  3) Quick gauntlet — 20 decks, 4 games each
+  4) Setup odds (goldfish simulation)
+  5) Deal sample opening hands
+  6) Load a different deck
+  7) Quit
+```
+
+Dragging a decklist onto the executable loads it straight away, and every CLI
+command still works from a terminal: `pokedeck.exe gauntlet my-deck.txt -n 10`.
+
 ## Decklist format
 
 The PTCG Live / PTCGO export format, with or without set codes. Set codes pin
 the exact print (and therefore the exact card), which matters when a Pokémon has
-been printed more than once:
+been printed more than once. Energy can be written either way — `Basic {F}
+Energy`, `Fighting Energy` and `Basic Fighting Energy` are the same card — and
+a print the pool has never seen is swapped for another printing of the same
+card, which `check` tells you about rather than doing quietly:
 
 ```
 Pokémon: 16

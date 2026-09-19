@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 
 from .cards import Attack, Card, Category, Effect, Stage, Subtype
 from .decklist import PRIZE_COUNT
+from .effects import is_once_per_turn
 from .knowledge import Resolution
 
 BENCH_LIMIT = 5
@@ -491,6 +492,12 @@ class Battle:
         return 1
 
     def _counter(self, source: str, side: Side, foe: Side, spot: Spot) -> int:
+        if source.startswith("attack:"):
+            wanted = source.split(":", 1)[1].casefold()
+            return sum(
+                1 for s in side.in_play()
+                if any(a.name.casefold() == wanted for a in s.card.attacks)
+            )
         return {
             "opponent_prizes_taken": foe.prizes_taken,
             "own_prizes_taken": side.prizes_taken,
@@ -500,6 +507,7 @@ class Battle:
             "opponent_bench": len(foe.bench),
             "energy_in_discard": sum(1 for c in side.discard if c.category is Category.ENERGY),
             "team_energy": sum(len(s.energy) for s in side.in_play()),
+            "opponent_item_discard": sum(1 for c in foe.discard if c.subtype is Subtype.ITEM),
         }.get(source, 0)
 
     def apply_attack(self, attacker_index: int, attack: Attack) -> None:
@@ -526,8 +534,18 @@ class Battle:
             self.apply_attack_effect(attacker_index, effect, spot, target, plan)
         self.check_knockouts()
 
+    def sheltered(self, attacker: Spot, target: Spot) -> bool:
+        """Is the target behind a Stadium that blanks rule-box attackers?"""
+        if self.stadium is None:
+            return False
+        if not any(e.op == "shelter_rule_boxless" for e in self.stadium.effects):
+            return False
+        return not target.card.rule_box and bool(attacker.card.rule_box)
+
     def final_damage(self, raw: int, spot: Spot, target: Spot) -> int:
         if raw <= 0:
+            return 0
+        if self.sheltered(spot, target):
             return 0
         damage = raw
         if target.card.weakness and target.card.weakness in spot.card.types:
@@ -721,10 +739,29 @@ class Battle:
         return len(pool) >= colorless
 
     def usable_attacks(self, index: int) -> list[Attack]:
+        """Attacks the Active can pay for, including any it is allowed to copy."""
         side = self.sides[index]
         if side.active is None:
             return []
-        return [a for a in side.active.card.attacks if self.can_pay(side.active, a)]
+        attacks = list(side.active.card.attacks)
+        if self.copies_bench_attacks(side.active):
+            for spot in side.bench:
+                attacks.extend(spot.card.attacks)
+        return [a for a in attacks if self.can_pay(side.active, a)]
+
+    @staticmethod
+    def copies_bench_attacks(spot: Spot) -> bool:
+        text = (spot.card.ability_text or "").lower()
+        return "use the attacks of any of your benched" in text
+
+    def stadium_ability(self, index: int):
+        """The Stadium effect this player may still use this turn, if any."""
+        side = self.sides[index]
+        if self.stadium is None or side.stadium_used:
+            return None
+        if not self.stadium.effects or not is_once_per_turn(self.stadium.ability_text):
+            return None
+        return self.stadium.effects
 
     def play_stadium(self, index: int, card: Card) -> None:
         side = self.sides[index]

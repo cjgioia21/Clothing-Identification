@@ -10,6 +10,7 @@ from __future__ import annotations
 from .cards import Category, Deck
 from .decklist import Issue
 from .knowledge import Resolution
+from .pool import load_pool
 
 STANDARD_MARKS = frozenset({"H", "I", "J"})
 ALL_MARKS = frozenset({"E", "F", "G", "H", "I", "J"})
@@ -32,28 +33,46 @@ def card_is_legal(card, marks: frozenset[str] = STANDARD_MARKS) -> bool:
 
 
 def check(deck: Deck, resolution: Resolution, format_name: str = "standard") -> list[Issue]:
-    """Legality problems, as errors, plus warnings for cards we cannot verify."""
-    marks = marks_for(format_name)
-    issues: list[Issue] = []
+    """Legality problems, as errors, plus warnings for cards we cannot verify.
 
+    Each line is checked against the print it names, so a list running two
+    printings of the same card is told which one is the problem.
+    """
+    marks = marks_for(format_name)
+    pool = load_pool()
+    issues: list[Issue] = []
     ace_specs: list[str] = []
+
     for entry in deck.entries:
         card = resolution.get(entry.name)
-        if not card.known or not card.regulation:
-            if not card.is_basic_energy:
-                issues.append(Issue("warning", f"{entry.name}: no printed card found, legality unverified"))
+        printed, _ = pool.lookup_print(entry.name, entry.set_code, entry.number)
+        if printed is not None:
+            card = printed
+        label = f"{entry.name} {entry.set_code} {entry.number}".strip()
+
+        if card.ace_spec:
+            ace_specs.append(f"{entry.count} {entry.name}")
+        if card.is_basic_energy:
+            continue
+        if not card.known:
+            issues.append(Issue("warning", f"{label}: no printed card found, legality unverified"))
+            continue
+        if not card.regulation:
+            issues.append(Issue(
+                "error",
+                f"{label} ({card.card_id}) has no regulation mark — not legal in {format_name}",
+            ))
             continue
         if not card_is_legal(card, marks):
             issues.append(Issue(
                 "error",
-                f"{entry.name} ({card.card_id}) is regulation mark {card.regulation} — "
+                f"{label} ({card.card_id}) is regulation mark {card.regulation} — "
                 f"not legal in {format_name}",
             ))
-        if card.ace_spec:
-            ace_specs.append(f"{entry.count} {entry.name}")
 
     total_ace = sum(
-        entry.count for entry in deck.entries if resolution.get(entry.name).ace_spec
+        entry.count for entry in deck.entries
+        if (pool.lookup(entry.name, entry.set_code, entry.number) or resolution.get(entry.name)).ace_spec
     )
     if total_ace > ACE_SPEC_LIMIT:
         issues.append(Issue(

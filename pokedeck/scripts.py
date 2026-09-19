@@ -7,13 +7,15 @@ from .cards import Card, Category, Effect, Stage, Subtype
 MATCHERS = {
     "any": lambda c: True,
     "pokemon": lambda c: c.category is Category.POKEMON,
-    "basic_pokemon": lambda c: c.is_basic_pokemon,
+    "basic_pokemon": lambda c: c.is_basic_pokemon and not c.fossil,
     "item": lambda c: c.subtype is Subtype.ITEM,
     "tool": lambda c: c.subtype is Subtype.TOOL,
     "supporter": lambda c: c.is_supporter,
     "stadium": lambda c: c.subtype is Subtype.STADIUM,
     "energy": lambda c: c.category is Category.ENERGY,
     "basic_energy": lambda c: c.is_basic_energy,
+    "evolution": lambda c: c.category is Category.POKEMON and not c.is_basic_pokemon,
+    "fossil": lambda c: c.fossil,
 }
 
 
@@ -61,6 +63,12 @@ def useful(battle, index: int, effects, spot=None) -> bool:
             return True
         if op in ("switch_self", "heal_team") and side.bench:
             return True
+        if op == "opponent_discard_to" and len(battle.opponent(index).hand) > effect.n:
+            return True
+        if op == "opponent_discard_filter" and any(
+            matches(c, effect.filter) for c in battle.opponent(index).hand
+        ):
+            return True
         if op == "switch_opponent" and battle.opponent(index).bench:
             return True
         if op == "discard_from_hand" and len(side.hand) <= effect.n:
@@ -102,6 +110,16 @@ def _apply(battle, index: int, effect: Effect, spot) -> None:
         foe = battle.opponent(index)
         if foe.bench:
             battle.switch_active(1 - index, battle.policies[index].gust_target(battle, index), forced=True)
+    elif op == "opponent_discard_to":
+        foe = battle.opponent(index)
+        while len(foe.hand) > effect.n:
+            foe.discard.append(foe.hand.pop())
+    elif op == "opponent_discard_filter":
+        foe = battle.opponent(index)
+        targets = [c for c in foe.hand if matches(c, effect.filter)][: effect.n]
+        for card in targets:
+            foe.hand.remove(card)
+            foe.discard.append(card)
     elif op == "heal_team":
         hurt = [s for s in side.in_play() if s.damage]
         if hurt:

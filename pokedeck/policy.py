@@ -78,7 +78,9 @@ class Policy:
             or self.attach_energy(battle, index)
             or self.attach_tool(battle, index)
             or self.play_items(battle, index)
+            or self.use_stadium(battle, index)
             or self.play_stadium(battle, index)
+            or self.play_any_supporter(battle, index)
         )
 
     def use_abilities(self, battle, index: int) -> bool:
@@ -157,6 +159,26 @@ class Policy:
             return True
         return False
 
+    def play_any_supporter(self, battle, index: int) -> bool:
+        """Last resort: a Supporter in hand beats passing with nothing done."""
+        side = battle.sides[index]
+        if side.supporter_used:
+            return False
+        playable = [
+            c for c in side.hand
+            if c.is_supporter and c.effects and battle.can_play_supporter(index, c)
+            and useful(battle, index, c.effects)
+            and self.supporter_value(battle, index, c) >= 0
+        ]
+        if not playable:
+            return False
+        card = max(playable, key=lambda c: self.supporter_value(battle, index, c))
+        side.hand.remove(card)
+        side.discard.append(card)
+        side.supporter_used = True
+        run(battle, index, card.effects)
+        return True
+
     def supporter_value(self, battle, index: int, card: Card) -> int:
         """How much this Supporter is worth playing right now.
 
@@ -183,6 +205,10 @@ class Policy:
                 value += 3 if self.wants_search(battle, index, effect) else 0
             elif effect.op == "attach_energy":
                 value += 5 if self.energy_shortfall(battle, index) else 1
+            elif effect.op == "opponent_discard_to":
+                value += 3 * max(0, len(foe.hand) - effect.n)
+            elif effect.op == "opponent_discard_filter":
+                value += 3 * sum(1 for c in foe.hand if matches(c, effect.filter))
         if len(side.deck) < 12:
             value -= 6
         if not side.deck:
@@ -342,6 +368,15 @@ class Policy:
         if not stadiums:
             return False
         battle.play_stadium(index, stadiums[0])
+        return True
+
+    def use_stadium(self, battle, index: int) -> bool:
+        """Stadiums with a once-a-turn ability are free value; take it."""
+        effects = battle.stadium_ability(index)
+        if effects is None or not useful(battle, index, effects):
+            return False
+        battle.sides[index].stadium_used = True
+        run(battle, index, effects)
         return True
 
     def consider_retreat(self, battle, index: int) -> None:
@@ -510,8 +545,15 @@ class Policy:
         return any(s.name == basic and s.turn_played < battle.turn for s in side.in_play())
 
     def _energy_wanted(self, battle, index: int, card: Card) -> bool:
+        """Would any attacker in play actually use this Energy?
+
+        A {C} in an attack cost is paid by any Energy at all, so a board that
+        wants Colorless wants whatever is in hand.
+        """
         side = battle.sides[index]
         needs = {c for s in side.in_play() for a in s.card.attacks for c in a.cost}
+        if "Colorless" in needs:
+            return True
         return bool(needs & set(card.energy_provides or ()))
 
 

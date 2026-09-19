@@ -26,8 +26,10 @@ SET_CODES = {
     "PAF": "sv04.5", "TEF": "sv05", "TWM": "sv06", "SFA": "sv06.5", "SCR": "sv07",
     "SSP": "sv08", "PRE": "sv08.5", "JTG": "sv09", "DRI": "sv10", "WHT": "sv10.5w",
     "BLK": "sv10.5b", "SVP": "svp", "SVE": "sve", "MFB": "mfb",
-    "MEG": "me01", "PHF": "me02", "ASH": "me02.5", "PFO": "me03", "CHR": "me04",
-    "PBL": "me05", "MEE": "mee", "MEP": "mep",
+    "MEG": "me01", "PFL": "me02", "ASC": "me02.5", "POR": "me03", "CHR": "me04",
+    "PBL": "me05", "MEE": "mee", "MEP": "mep", "30C": "30th", "30TH": "30th",
+    # Earlier guesses at the Mega Evolution codes, kept so older lists still parse.
+    "PHF": "me02", "ASH": "me02.5", "PFO": "me03",
 }
 
 _STAGES = {
@@ -60,14 +62,26 @@ class Pool:
 
     def lookup(self, name: str, set_code: str | None = None, number: str | None = None) -> Card | None:
         """Find a printed card, preferring the exact print the decklist names."""
+        return self.lookup_print(name, set_code, number)[0]
+
+    def lookup_print(
+        self, name: str, set_code: str | None = None, number: str | None = None
+    ) -> tuple[Card | None, bool]:
+        """The card, and whether the exact print the list asked for was found.
+
+        A list can name a set code this pool has never heard of — an older
+        format, or an abbreviation we do not know — and the caller deserves to
+        be told which print it got instead.
+        """
         if set_code and number:
-            card = self.by_print.get((SET_CODES.get(set_code.upper(), set_code.lower()), str(number).lstrip("0")))
+            set_id = SET_CODES.get(set_code.upper(), set_code.lower())
+            card = self.by_print.get((set_id, str(number).lstrip("0")))
             if card is not None and _key(card.name) == _key(name):
-                return card
+                return card, True
         prints = self.by_name.get(_key(name))
         if not prints:
-            return None
-        return prints[0]
+            return None, False
+        return prints[0], not (set_code and number)
 
     def prints(self, name: str) -> list[Card]:
         return list(self.by_name.get(_key(name), ()))

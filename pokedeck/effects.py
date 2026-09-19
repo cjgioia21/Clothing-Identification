@@ -153,7 +153,7 @@ def _accelerate(m):
     return [Effect(op="attach_energy", n=_count(m.group(1)), filter="basic_energy", dest=m.group(2).split()[0])]
 
 
-@_pattern(r"search your deck for (?:up to )?(\d+|a|an|two|three) (basic pok.mon|pok.mon|item|supporter|basic energy|energy)")
+@_pattern(r"search (?:your|their) deck for (?:up to )?(\d+|a|an|two|three) (basic pok.mon|pok.mon|item|supporter|basic energy|energy)")
 def _search(m):
     targets = {
         "basic pokémon": "basic_pokemon",
@@ -210,12 +210,12 @@ def _super_rod(m):
     return [Effect(op="recover", n=int(m.group(1)))]
 
 
-@_pattern(r"search your deck for (?:up to )?(\d+|a|an|two|three) (?:basic )?pok.mon[^.]*?and put (?:it|them) onto your bench", priority=10)
+@_pattern(r"search (?:your|their) deck for (?:up to )?(\d+|a|an|two|three) (?:basic )?pok.mon[^.]*?and put (?:it|them) onto your bench", priority=10)
 def _bench_search(m):
     return [Effect(op="search", n=_count(m.group(1)), filter="basic_pokemon", dest="bench")]
 
 
-@_pattern(r"search your deck for an item card and a pok.mon tool card", priority=10)
+@_pattern(r"search (?:your|their) deck for an item card and a pok.mon tool card", priority=10)
 def _arven(m):
     return [Effect(op="search", n=1, filter="item"), Effect(op="search", n=1, filter="tool")]
 
@@ -311,12 +311,12 @@ def _draw_until(m):
     return [Effect(op="draw_to", n=int(m.group(1)))]
 
 
-@_pattern(r"search your deck for a card and put it into your hand", priority=20)
+@_pattern(r"search (?:your|their) deck for a card and put it into your hand", priority=20)
 def _search_any(m):
     return [Effect(op="search", n=1, filter="any")]
 
 
-@_pattern(r"search your deck for (?:up to )?(\d+|a|an|two|three) basic (?:\{?\w+\}? )?energy cards? and attach", priority=25)
+@_pattern(r"search (?:your|their) deck for (?:up to )?(\d+|a|an|two|three) basic (?:\{?\w+\}? )?energy cards? and attach", priority=25)
 def _search_attach(m):
     return [Effect(op="attach_energy", n=_count(m.group(1)), filter="basic_energy", dest="deck")]
 
@@ -375,12 +375,12 @@ def _recycle(m):
     return [Effect(op="recover", n=int(m.group(1)), filter=target)]
 
 
-@_pattern(r"search your deck for any number of basic energy cards", priority=20)
+@_pattern(r"search (?:your|their) deck for any number of basic energy cards", priority=20)
 def _energy_pro(m):
     return [Effect(op="search", n=2, filter="basic_energy")]
 
 
-@_pattern(r"search your deck for any number of basic pok.mon and put them onto your bench", priority=25)
+@_pattern(r"search (?:your|their) deck for any number of basic pok.mon and put them onto your bench", priority=25)
 def _trolley(m):
     return [Effect(op="search", n=2, filter="basic_pokemon", dest="bench")]
 
@@ -393,6 +393,52 @@ def _retreat_less(m):
 @_pattern(r"put (?:up to )?(\d+) (?:supporter|item) cards? from your discard pile into your hand", priority=20)
 def _headset(m):
     return [Effect(op="recover", n=int(m.group(1)), filter="supporter", dest="hand")]
+
+
+@_pattern(r"this attack does (\d+) damage for each of your pok.mon in play that has the (\w+) attack", priority=25)
+def _scale_named_attack(m):
+    return [Effect(op="scale", n=int(m.group(1)), filter=f"attack:{m.group(2)}")]
+
+
+@_pattern(r"this attack does (\d+) damage for each item card in your opponent's discard pile", priority=25)
+def _scale_opponent_items(m):
+    return [Effect(op="scale", n=int(m.group(1)), filter="opponent_item_discard")]
+
+
+@_pattern(r"prevent all damage done to pok.mon that don't have a rule box .*by attacks from the opponent's pok.mon ex and pok.mon v", priority=25)
+def _stadium_shelter(m):
+    return [Effect(op="shelter_rule_boxless")]
+
+
+@_pattern(r"play this card as if it were a (\d+)-hp basic", priority=25)
+def _fossil(m):
+    return [Effect(op="play_as_pokemon", n=int(m.group(1)))]
+
+
+@_pattern(r"your opponent discards cards from their hand until they have (\d+) cards", priority=25)
+def _hand_squeeze(m):
+    return [Effect(op="opponent_discard_to", n=int(m.group(1)))]
+
+
+@_pattern(r"your opponent reveals their hand,? and you discard up to (\d+) item cards", priority=25)
+def _item_strip(m):
+    return [Effect(op="opponent_discard_filter", n=int(m.group(1)), filter="item")]
+
+
+@_pattern(r"discard up to (\d+) pok.mon[^.]*from your hand,? and draw (\d+) cards? for each card you discarded", priority=25)
+def _discard_for_draw(m):
+    count, per = int(m.group(1)), int(m.group(2))
+    return [Effect(op="discard_from_hand", n=count, filter="pokemon"), Effect(op="draw", n=count * per)]
+
+
+@_pattern(r"search (?:your|their) deck for up to (\d+) item cards that have .?antique.? in their name and put them onto their bench", priority=30)
+def _fossil_quarry(m):
+    return [Effect(op="search", n=int(m.group(1)), filter="fossil", dest="bench")]
+
+
+@_pattern(r"search (?:your|their) deck for an evolution pok.mon and an energy card", priority=25)
+def _hilda(m):
+    return [Effect(op="search", n=1, filter="evolution"), Effect(op="search", n=1, filter="energy")]
 
 
 _WORDS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
@@ -478,6 +524,11 @@ def compile_attack(raw: dict) -> Attack:
         effects=tuple(effects),
         scripted=not unmodelled,
     )
+
+
+def is_once_per_turn(text: str) -> bool:
+    """Stadium text that each player may use once on their own turn."""
+    return bool(re.search(r"once during each player's turn", text or "", re.IGNORECASE))
 
 
 def lifts_first_turn_ban(text: str) -> bool:

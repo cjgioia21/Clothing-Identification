@@ -125,6 +125,7 @@ class Card:
     card_id: str = ""
     regulation: str = ""
     ace_spec: bool = False
+    fossil: bool = False  # a Trainer played as if it were a Basic Pokémon
     plays_first_turn: bool = False  # a Supporter whose text lifts the first-turn ban
     set_id: str = ""
     energy_provides: tuple[str, ...] = ()
@@ -188,6 +189,7 @@ class Card:
             card_id=raw.get("card_id", ""),
             regulation=raw.get("regulation", ""),
             ace_spec=bool(raw.get("ace_spec", False)),
+            fossil=bool(raw.get("fossil", False)),
             plays_first_turn=bool(raw.get("plays_first_turn", False)),
             set_id=raw.get("set_id", ""),
             energy_provides=tuple(raw.get("energy_provides", ())),
@@ -215,7 +217,7 @@ class Card:
                 patch[key] = tuple(Attack.from_dict(a) for a in value)
             elif key in ("hp", "retreat", "prize_value", "resistance_value", "energy_count"):
                 patch[key] = int(value)
-            elif key in ("ace_spec", "plays_first_turn"):
+            elif key in ("ace_spec", "fossil", "plays_first_turn"):
                 patch[key] = bool(value)
             elif key in ("types", "energy_provides"):
                 patch[key] = tuple(value)
@@ -259,6 +261,8 @@ class DeckEntry:
 class Deck:
     entries: list[DeckEntry] = field(default_factory=list)
     name: str = "deck"
+    header_counts: dict = field(default_factory=dict)
+    """What each category header claimed, so a typo in the list can be caught."""
 
     @property
     def size(self) -> int:

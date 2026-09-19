@@ -123,17 +123,24 @@ class GauntletReport:
 
 
 def load_field(limit: int | None = None) -> list[tuple[Deck, Resolution]]:
-    """Load the bundled gauntlet decks, in a stable order."""
+    """Load the bundled gauntlet decks, in a stable order.
+
+    A ``limit`` takes an even spread across the field rather than the first few
+    files, so a short run still meets every archetype instead of four variants
+    of whatever sorts first.
+    """
+    files = [item for item in sorted(resources.files(FIELD_PACKAGE).iterdir(), key=lambda p: p.name)
+             if item.name.endswith(".txt")]
+    if limit and 0 < limit < len(files):
+        step = len(files) / limit
+        files = [files[int(index * step)] for index in range(limit)]
+
     entries = []
-    for item in sorted(resources.files(FIELD_PACKAGE).iterdir(), key=lambda p: p.name):
-        if not item.name.endswith(".txt"):
-            continue
+    for item in files:
         text = item.read_text(encoding="utf-8")
         title = text.splitlines()[0].lstrip("# ").strip() or item.name
         deck = parse(text, name=title)
         entries.append((deck, resolve(deck)))
-        if limit and len(entries) >= limit:
-            break
     return entries
 
 

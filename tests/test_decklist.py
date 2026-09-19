@@ -76,3 +76,26 @@ def test_format_round_trips(charizard_deck):
 def test_is_basic_energy_name():
     assert is_basic_energy_name("Basic Fire Energy")
     assert not is_basic_energy_name("Jet Energy")
+
+
+def test_energy_symbols_are_read_as_the_full_name():
+    deck = parse("Energy: 8\n5 Basic {F} Energy MEE 14\n3 {W} Energy")
+    assert [e.name for e in deck.entries] == ["Basic Fighting Energy", "Basic Water Energy"]
+
+
+def test_bare_type_energy_is_basic_energy():
+    deck = parse("Energy: 4\n4 Fighting Energy")
+    assert deck.entries[0].name == "Basic Fighting Energy"
+    assert is_basic_energy_name(deck.entries[0].name)
+
+
+def test_set_codes_with_digits_parse():
+    deck = parse("Pokémon: 3\n3 Seismitoad 30C 84")
+    entry = deck.entries[0]
+    assert (entry.name, entry.set_code, entry.number) == ("Seismitoad", "30C", "84")
+
+
+def test_a_header_that_disagrees_with_its_lines_is_flagged():
+    deck = parse("Pokémon: 8\n4 Tympole BLK 19\n4 Budew PRE 4\n2 Mew ex 30C 152")
+    messages = [i.message for i in validate(deck) if i.level == "warning"]
+    assert any("header says 8" in m and "add up to 10" in m for m in messages)

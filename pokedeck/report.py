@@ -99,6 +99,20 @@ def render_check(
         for issue in errors + warnings:
             lines.append(f"  [{issue.level}] {issue.message}")
 
+    if resolution.substituted:
+        lines += [
+            "",
+            "Printings not in the card pool — another print of the same card was used:",
+        ]
+        lines += [f"  {swap}" for swap in resolution.substituted]
+
+    if resolution.no_battle_data:
+        lines += [
+            "",
+            "Pokémon with no printed stats (they fight as 60 HP blanks):",
+            "  " + ", ".join(sorted(resolution.no_battle_data)),
+        ]
+
     if resolution.unknown:
         lines += [
             "",

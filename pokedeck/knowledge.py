@@ -14,6 +14,8 @@ import json
 from dataclasses import dataclass, field
 from importlib import resources
 
+from dataclasses import replace as _replace
+
 from .cards import Card, Category, Stage, Subtype
 from .decklist import Deck, is_basic_energy_name
 from .effects import compile_text
@@ -30,6 +32,8 @@ class Resolution:
     """Cards whose printed text is only partly modelled."""
     no_battle_data: list[str] = field(default_factory=list)
     """Pokémon with no printed stats — they fight as 60 HP blanks."""
+    substituted: list[str] = field(default_factory=list)
+    """Lines whose printed version could not be found, so another was used."""
 
     def get(self, name: str) -> Card:
         return self.cards[name]
@@ -90,11 +94,18 @@ def resolve(
     unknown: list[str] = []
     partial: list[str] = []
     gaps: list[str] = []
+    substituted: list[str] = []
     for entry in deck.entries:
         if entry.name in cards:
             continue
         key = _key(entry.name)
-        printed = pool.lookup(entry.name, entry.set_code, entry.number) if pool else None
+        printed, exact = (
+            pool.lookup_print(entry.name, entry.set_code, entry.number) if pool else (None, False)
+        )
+        if printed is not None and not exact:
+            substituted.append(
+                f"{entry.name} {entry.set_code} {entry.number} → {printed.card_id}"
+            )
         script = curated.get(key)
 
         if printed is not None:
@@ -106,7 +117,7 @@ def resolve(
             if not card.is_basic_energy:
                 unknown.append(entry.name)
 
-        cards[entry.name] = card
+        cards[entry.name] = _as_fossil(card) if _is_fossil(card) else card
         if card.known and script is None and _is_partial(card):
             partial.append(entry.name)
         if card.category is Category.POKEMON and (not card.hp or not card.attacks):
@@ -117,7 +128,28 @@ def resolve(
         unknown=unknown,
         partial=partial,
         no_battle_data=gaps,
+        substituted=substituted,
         related=_related_lines(cards, pool, curated),
+    )
+
+
+def _is_fossil(card: Card) -> bool:
+    return any(effect.op == "play_as_pokemon" for effect in card.effects)
+
+
+def _as_fossil(card: Card) -> Card:
+    """A Fossil is a Trainer you put down as if it were a Basic Pokémon."""
+    hp = next(effect.n for effect in card.effects if effect.op == "play_as_pokemon")
+    return _replace(
+        card,
+        category=Category.POKEMON,
+        subtype=Subtype.NONE,
+        stage=Stage.BASIC,
+        hp=hp,
+        types=("Colorless",),
+        retreat=99,  # "can't retreat"
+        effects=(),
+        fossil=True,
     )
 
 

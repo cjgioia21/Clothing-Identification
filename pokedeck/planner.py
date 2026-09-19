@@ -81,6 +81,10 @@ def legal_actions(battle, index: int) -> list[Action]:
             if battle.stadium is None or battle.stadium_owner != index:
                 offer("stadium", hand=position, key=("stadium", card.name))
 
+    stadium = battle.stadium_ability(index)
+    if stadium is not None and useful(battle, index, stadium):
+        offer("stadium_ability", key=("stadium_ability",))
+
     if side.active is not None and not side.retreated:
         cost = side.active.retreat_cost()
         if cost <= len(side.active.energy) and side.active.condition not in ("asleep", "paralyzed"):
@@ -115,6 +119,14 @@ def apply_action(battle, index: int, action: Action) -> bool:
         spot = spots[action.spot]
         spot.ability_used_turn = battle.turn
         run(battle, index, spot.card.ability, spot)
+        return True
+
+    if action.kind == "stadium_ability":
+        effects = battle.stadium_ability(index)
+        if effects is None:
+            return False
+        side.stadium_used = True
+        run(battle, index, effects)
         return True
 
     if action.kind == "retreat":

@@ -73,3 +73,17 @@ def test_skipped_evolution_stages_are_still_known():
 def test_decklist_categories_do_not_override_the_database():
     deck = parse("Trainer: 2\n2 Comfey LOR 79")
     assert resolve(deck).get("Comfey").category is Category.POKEMON
+
+
+def test_a_print_we_do_not_have_is_reported_as_a_substitution():
+    deck = parse("Trainer: 2\n2 Ultra Ball PLF 122")
+    resolution = resolve(deck)
+    assert resolution.get("Ultra Ball").known
+    assert any("Ultra Ball PLF 122" in swap for swap in resolution.substituted)
+
+
+def test_the_exact_print_named_is_used_when_we_have_it():
+    deck = parse("Trainer: 2\n2 Ultra Ball SVI 196")
+    resolution = resolve(deck)
+    assert resolution.substituted == []
+    assert resolution.get("Ultra Ball").card_id == "sv01-196"
