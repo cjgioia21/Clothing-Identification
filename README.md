@@ -117,10 +117,17 @@ Two players ship with the tool, and `--policy` picks between them.
 **`champion` (default)** searches its turn instead of following a checklist.
 For every action it could take — use an Ability, play this Item, evolve that
 Pokémon, attach Energy here rather than there, retreat, attack with this — it
-clones the game, plays the action, finishes the turn, lets the opponent answer
-and plays its own follow-up, then scores the position that comes out. The
-action with the best average score is the one it actually takes, and then it
-searches again from the new position.
+clones the game, plays the action, lets the opponent answer and plays its own
+follow-up, then scores the position that comes out. The action with the best
+average score is the one it actually takes, and then it searches again from
+the new position.
+
+Each action is judged on its own, without the rest of the turn played out
+behind it. That distinction matters more than it sounds: with a greedy
+continuation filling in the gaps, every option scored about the same, and the
+search emptied its hand every turn for marginal value — searching a deck away
+to fetch a Pokémon it did not need. Judged alone, a card it has no use for
+stays a card it still has.
 
 Three things make that search honest and affordable:
 
@@ -145,14 +152,14 @@ different, 60 games each:
 
 | matchup | searching player wins |
 | --- | --- |
-| Dragapult mirror | 73% |
-| Dragapult vs Raging Bolt | 70% |
-| Raging Bolt mirror | 50% |
+| Raging Bolt mirror | 80% |
+| Dragapult vs Raging Bolt | 77% |
+| Dragapult mirror | 60% |
 
-That last row is the honest one. The Raging Bolt mirror is a deck-out race, and
-a search that only looks one turn ahead does not feel a race it cannot see the
-end of; the position score carries a deck-out term precisely because the search
-would otherwise draw itself to death there.
+The Raging Bolt mirror is a deck-out race, and it used to be the hole in this
+player — 50% before it stopped spending cards it did not need. The position
+score still carries a deck-out term, because a one-turn search cannot feel a
+race it cannot see the end of.
 
 **`greedy`** is the heuristic player: bench early, evolve on curve, stack Energy
 on the attacker closest to its real attack, draw only when the hand is thin

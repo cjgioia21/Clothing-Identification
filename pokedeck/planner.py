@@ -197,16 +197,22 @@ class ChampionPolicy(Policy):
     """Searches its turn instead of following a checklist.
 
     ``rollouts`` samples of the hidden information are played out per candidate
-    action, each one finishing the turn and taking the opponent's answer, and
-    the action with the best average position is the one actually taken.
+    action, each one taking the opponent's answer and this player's follow-up,
+    and the action with the best average position is the one actually taken.
+
+    Each action is judged on its own rather than with the rest of the turn
+    played out behind it. That is what stops the search emptying its hand for
+    marginal value: a card it does not need to play stays a card it still has.
     """
 
     def __init__(self, rollouts: int = 4, width: int = 14, seed: int = 0,
-                 tolerance: float = 6.0, depth: int = 2, finalists: int = 5):
+                 tolerance: float = 0.0, depth: int = 2, finalists: int = 5,
+                 finish_turn: bool = False):
         self.rollouts = rollouts
         self.depth = depth
         self.width = width
         self.finalists = finalists
+        self.finish_turn = finish_turn
         self.tolerance = tolerance
         self.rng = random.Random(seed)
 
@@ -269,7 +275,7 @@ class ChampionPolicy(Policy):
             )
             if action is not None and not apply_action(clone, index, action):
                 return float("-inf")
-            total += _rollout(clone, index, self.depth)
+            total += _rollout(clone, index, self.depth, self.finish_turn)
         return total / max(1, self.rollouts)
 
     # ---------------------------------------------------------------- attack
@@ -310,9 +316,15 @@ class ChampionPolicy(Policy):
 _ROLLOUT_POLICY = Policy()
 
 
-def _rollout(clone, index: int, depth: int = 1) -> float:
-    """Finish this turn greedily, let the opponent answer, and score it."""
-    _ROLLOUT_POLICY.play_turn(clone, index)
+def _rollout(clone, index: int, depth: int = 1, finish: bool = True) -> float:
+    """Play the turn out, let the opponent answer, and score what is left.
+
+    With ``finish`` the rest of the turn is played by the greedy policy, which
+    is a guess at what this player would do next; without it the action is
+    judged on its own, which keeps a card in hand worth something.
+    """
+    if finish:
+        _ROLLOUT_POLICY.play_turn(clone, index)
     if not clone.finished and clone.can_attack(index):
         _ROLLOUT_POLICY.attack(clone, index)
     return _reply(clone, index, depth)
