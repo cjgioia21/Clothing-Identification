@@ -256,9 +256,21 @@ def _wildcard_rule(text: str) -> tuple[str, int]:
     """When (and how much) a Special Energy counts as every type.
 
     Prism Energy is a rainbow only on a Basic, Neo Upper only on a Stage 2 —
-    and then for two Energy at once.
+    and then for two Energy at once. Reversal Energy asks for more: an
+    Evolution with no Rule Box, and only while you are behind on prizes.
+    Reading that last one as "always" hands the card three Energy it has not
+    earned, which is how a deck-improvement scan ends up recommending it.
     """
     lowered = (text or "").lower()
+    # The parenthetical "(Pokémon ex, Pokémon V, etc. have Rule Boxes)" puts a
+    # full stop in the middle of the sentence, so this reads the conditions as
+    # phrases rather than trying to span them.
+    amount = re.search(r"provides only (\d+) energy", lowered)
+    if (amount
+            and "more prize cards remaining than your opponent" in lowered
+            and "evolution pok" in lowered
+            and "rule box" in lowered):
+        return "evolution_behind", int(amount.group(1))
     match = re.search(
         r"if this card is attached to a (basic|stage 2) pok.mon, this card provides every type"
         r"[^.]*?provides only (\d+) energy",

@@ -281,3 +281,62 @@ def test_your_turn_ends_stops_the_rest_of_the_turn(battle):
     before = len(battle.sides[0].hand)
     Policy().play_turn(battle, 0)
     assert len(battle.sides[0].hand) == before   # nothing was played
+
+
+# ------------------------------------------------------------ Reversal Energy
+def reversal():
+    return load_pool().lookup("Reversal Energy")
+
+
+def test_reversal_energy_asks_for_three_things(battle):
+    card = reversal()
+    assert card.energy_wild_if == "evolution_behind"
+    assert card.energy_wild_count == 3
+
+
+def test_reversal_energy_is_one_colorless_on_a_basic(battle):
+    spot = Spot(stack=[basic("Rookie")], turn_played=0, energy=[reversal()])
+    assert spot.energy_units(behind=True) == [frozenset({"Colorless"})]
+
+
+def test_reversal_energy_is_one_colorless_on_a_rule_box_evolution(battle):
+    grown = basic("Bigmon", stage=Stage.STAGE1, rule_box="ex")
+    spot = Spot(stack=[grown], turn_played=0, energy=[reversal()])
+    assert spot.energy_units(behind=True) == [frozenset({"Colorless"})]
+
+
+def test_reversal_energy_is_one_colorless_while_you_are_ahead(battle):
+    grown = basic("Toadmon", stage=Stage.STAGE2)
+    spot = Spot(stack=[grown], turn_played=0, energy=[reversal()])
+    assert spot.energy_units(behind=False) == [frozenset({"Colorless"})]
+
+
+def test_reversal_energy_is_three_wildcards_when_all_three_hold(battle):
+    grown = basic("Toadmon", stage=Stage.STAGE2)
+    spot = Spot(stack=[grown], turn_played=0, energy=[reversal()])
+    units = spot.energy_units(behind=True)
+    assert len(units) == 3
+    assert all("Fighting" in unit and "Water" in unit for unit in units)
+
+
+def test_being_behind_on_prizes_is_read_off_the_board(battle):
+    side, foe = battle.sides
+    spot = side.active
+    del foe.prizes[:2]                      # they have taken two, we have taken none
+    assert battle.behind_on_prizes(spot, 0)
+    del side.prizes[:3]
+    assert not battle.behind_on_prizes(spot, 0)
+
+
+def test_reversal_energy_pays_for_a_real_attack_only_when_it_should(battle):
+    attack = Attack(name="Heavy Swing",
+                    cost=("Fighting", "Colorless", "Colorless"), damage=180)
+    grown = basic("Toadmon", stage=Stage.STAGE2, attacks=(attack,))
+    side, foe = battle.sides
+    side.active = Spot(stack=[grown], turn_played=0, energy=[reversal()])
+
+    del side.prizes[:3]                     # we are ahead: one Colorless, not enough
+    assert not battle.can_pay(side.active, attack, 0)
+
+    side.prizes = list(foe.prizes) + list(foe.prizes)   # now behind
+    assert battle.can_pay(side.active, attack, 0)

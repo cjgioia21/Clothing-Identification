@@ -124,11 +124,13 @@ class Spot:
     def prize_value(self) -> int:
         return max(1, self.card.prize_value)
 
-    def energy_units(self) -> list[frozenset[str]]:
+    def energy_units(self, behind: bool = False) -> list[frozenset[str]]:
         """Each attached Energy as the set of types it can pay for.
 
         A rainbow Energy is one unit that counts as anything, not ten units —
-        which is the difference between paying a cost and not.
+        which is the difference between paying a cost and not. ``behind`` says
+        whether this player has more prizes left than the opponent, which is
+        half of what Reversal Energy asks for.
         """
         units: list[frozenset[str]] = []
         for card in self.energy:
@@ -137,6 +139,9 @@ class Spot:
                 wild == "always"
                 or (wild == "basic" and self.card.stage is Stage.BASIC)
                 or (wild == "stage2" and self.card.stage is Stage.STAGE2)
+                or (wild == "evolution_behind" and behind
+                    and self.card.stage is not Stage.BASIC
+                    and not self.card.rule_box)
             )
             if applies:
                 units.extend([_ANY_TYPE] * max(1, card.energy_wild_count))
@@ -699,7 +704,7 @@ class Battle:
         if kind.startswith("spare_energy:"):
             spare = int(kind.split(":", 1)[1])
             cost = len(self._attacking_cost or ())
-            return len(spot.energy_units()) >= cost + spare
+            return len(spot.energy_units(behind=self.behind_on_prizes(spot))) >= cost + spare
         if kind == "self_damaged":
             return bool(spot.damage)
         if kind == "bench_damaged":
@@ -1254,7 +1259,7 @@ class Battle:
         Typed requirements are matched first, spending the least flexible
         Energy that fits, so a rainbow is kept back for whatever needs it.
         """
-        units = spot.energy_units()
+        units = spot.energy_units(behind=self.behind_on_prizes(spot, index))
         needed = [c for c in attack.cost if c != "Colorless"]
         colorless = len(attack.cost) - len(needed)
         colorless = max(0, colorless - self.cost_discount(spot, attack))
@@ -1265,6 +1270,19 @@ class Battle:
                 return False
             units.remove(min(options, key=len))
         return len(units) >= colorless
+
+    def behind_on_prizes(self, spot: Spot, index: int | None = None) -> bool:
+        """Does this Pokémon's owner have more prizes left than the opponent?
+
+        That is the "if you have more Prize cards remaining" half of Reversal
+        Energy — it turns on when you are losing, not whenever it is attached.
+        """
+        if index is None:
+            index = next((i for i, side in enumerate(self.sides)
+                          if spot in side.in_play()), None)
+        if index is None:
+            return False
+        return self.sides[index].prizes_left() > self.opponent(index).prizes_left()
 
     def cost_discount(self, spot: Spot, attack: Attack) -> int:
         """Abilities that make a named attack cheaper, such as Bloodmoon's."""
