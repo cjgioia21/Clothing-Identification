@@ -76,6 +76,12 @@ _IGNORABLE = (
     r"if you go first, you can use this attack during your first turn",
     r"you may discard that card",
     r"you must play 2 [\w' ]+ cards at once",
+    r"once during your turn,? if this pok.mon is in the active spot,? you may use this ability",
+    r"once during your turn,? when you play this pok.mon from your hand onto your bench,? you may use this ability",
+    r"as often as you like during your turn,? you may use this ability",
+    r"if you attached energy to a pok.mon in this way",
+    r"if a player no longer has any tera pok.mon in play",
+    r"when this card leaves play, both players discard pok.mon",
 )
 
 _PATTERNS: list[tuple[int, re.Pattern, callable]] = []
@@ -385,7 +391,7 @@ def _dig(m):
     return [Effect(op="dig", n=int(m.group(1)), filter="any")]
 
 
-@_pattern(r"you may reveal an? (supporter|item|pok.mon|basic energy|energy|stadium) card you find there", priority=20)
+@_pattern(r"you may reveal (?:up to \d+ in any combination of [^.]*?|an? )(supporter|item|pok.mon|basic energy|energy|stadium)[^.]*?you find there", priority=20)
 def _dig_take(m):
     targets = {"supporter": "supporter", "item": "item", "pokémon": "pokemon",
                "pokemon": "pokemon", "basic energy": "basic_energy", "energy": "energy",
@@ -521,7 +527,7 @@ def _hit_every_ex(m):
     return [Effect(op="hit_rule_boxes", n=int(m.group(1)))]
 
 
-@_pattern(r"you may discard up to (\d+) basic energy from your benched pok.mon", priority=25)
+@_pattern(r"you may discard up to (\d+) (?:basic )?energy from your benched pok.mon", priority=25)
 def _bench_energy_cost(m):
     return [Effect(op="discard_energy_scale", n=0, filter="pokemon")]
 
@@ -583,7 +589,7 @@ def _set_weakness(m):
     return [Effect(op="set_weakness", filter=m.group(1).strip("{}"), dest=m.group(2).strip("{}"))]
 
 
-@_pattern(r"once during your turn,? you may attach a basic (\{?\w+\}?) energy card from your hand to this pok.mon", priority=25)
+@_pattern(r"once during your turn,? you may attach a basic (\{?\w+\}?) energy card from your hand to (?:this pok.mon|1 of your pok.mon)", priority=25)
 def _extra_attach(m):
     return [Effect(op="attach_from_hand", n=1, filter="basic_energy")]
 
@@ -598,7 +604,7 @@ def _ability_lock(m):
     return [Effect(op="lock_abilities")]
 
 
-@_pattern(r"(?:you may )?put (\d+) damage counters? on 1 of your opponent's pok.mon", priority=26)
+@_pattern(r"(?:you may )?(?:put|place) (\d+) damage counters? on 1 of your opponent's pok.mon", priority=26)
 def _place_counters(m):
     return [Effect(op="place_counters", n=int(m.group(1)) * 10)]
 
@@ -628,7 +634,7 @@ def _attack_attach(m):
     return [Effect(op="attach_from_hand", n=1, filter="basic_energy")]
 
 
-@_pattern(r"move (?:a|1) basic energy from 1 of your pok.mon to another", priority=26)
+@_pattern(r"move (?:a|1|any amount of) (?:basic )?(?:\{?\w+\}? )?energy from (?:1 of )?your (?:other )?pok.mon to (?:another|this pok.mon)", priority=26)
 def _move_energy(m):
     return [Effect(op="move_energy", n=1)]
 
@@ -797,9 +803,11 @@ def _revenge_cost(m):
     return [Effect(op="requires_knockout")]
 
 
-@_pattern(r"each player shuffles their hand into their deck\. then,? you draw (\d+) cards?,? and your opponent draws (\d+) cards?", priority=29)
+@_pattern(r"each player shuffles their hand into their deck(?:\.|,)?\s*(?:then,? )?(?:you draw (\d+) cards?,? and your opponent draws (\d+) cards?)?", priority=29)
 def _stamp(m):
-    return [Effect(op="stamp", n=int(m.group(1)), dest=str(int(m.group(2))))]
+    mine = int(m.group(1)) if m.group(1) else 0
+    theirs = int(m.group(2)) if m.group(2) else 0
+    return [Effect(op="stamp", n=mine, dest=str(theirs))]
 
 
 @_pattern(r"discard the top (\d+) cards? of your deck", priority=29)
@@ -937,6 +945,167 @@ def _self_counters(m):
 def _transformation(m):
     return [Effect(op="discard_from_hand", n=1, filter="self"),
             Effect(op="swap_from_discard")]
+
+
+
+# ------------------------------------------------ riders on the Mega attackers
+@_pattern(r"if this pok.mon has any damage counters on it,? this attack does (\d+) more damage", priority=32)
+def _bonus_when_hurt(m):
+    return [Effect(op="bonus_if", n=int(m.group(1)), filter="self_damaged")]
+
+
+@_pattern(r"if your benched pok.mon have any damage counters on them,? this attack does (\d+) more damage", priority=32)
+def _bonus_when_bench_hurt(m):
+    return [Effect(op="bonus_if", n=int(m.group(1)), filter="bench_damaged")]
+
+
+@_pattern(r"if this pok.mon moved from your bench to the active spot this turn,? this attack does (\d+) more damage", priority=32)
+def _bonus_after_switch(m):
+    return [Effect(op="bonus_if", n=int(m.group(1)), filter="switched_in")]
+
+
+@_pattern(r"if there are (\d+) or fewer cards in your deck,? this attack does (\d+) more damage", priority=32)
+def _bonus_on_empty_deck(m):
+    return [Effect(op="bonus_if", n=int(m.group(2)), filter=f"thin_deck:{m.group(1)}")]
+
+
+@_pattern(r"this attack does (\d+) more damage for each (?:\{?\w+\}? )?energy attached to all of your pok.mon", priority=32)
+def _bonus_per_team_energy(m):
+    return [Effect(op="bonus_per", n=int(m.group(1)), filter="team_energy")]
+
+
+@_pattern(r"this attack does (\d+) more damage for each \{?c\}? in your opponent's active pok.mon's retreat cost", priority=32)
+def _bonus_per_retreat(m):
+    return [Effect(op="bonus_per", n=int(m.group(1)), filter="target_retreat")]
+
+
+@_pattern(r"this attack does (\d+) damage for each basic energy card in your opponent's discard pile", priority=32)
+def _scale_opponent_energy_discard(m):
+    return [Effect(op="scale", n=int(m.group(1)), filter="opponent_energy_discard")]
+
+
+@_pattern(r"this attack does (\d+) damage for each of your ([\w' ]+?) pok.mon in play", priority=32)
+def _scale_named_in_play(m):
+    return [Effect(op="scale", n=int(m.group(1)), filter=f"named_in_play:{m.group(2).strip().casefold()}")]
+
+
+@_pattern(r"if your opponent's active pok.mon has exactly (\d+) damage counters on it,? that pok.mon is knocked out", priority=32)
+def _ko_on_exact_counters(m):
+    return [Effect(op="ko_target_if", n=int(m.group(1)) * 10, filter="exact_counters")]
+
+
+@_pattern(r"if your opponent's active pok.mon is affected by a special condition,? it is knocked out", priority=32)
+def _ko_the_afflicted(m):
+    return [Effect(op="ko_target_if", filter="afflicted")]
+
+
+# ------------------------------------------------------- restrictions and costs
+@_pattern(r"this pok.mon can't attack unless you have (\d+) or more ([\w' ]+?) pok.mon in play", priority=32)
+def _needs_a_team(m):
+    return [Effect(op="attack_needs_team", n=int(m.group(1)),
+                   filter=m.group(2).strip().casefold())]
+
+
+@_pattern(r"you can't use this card during your first turn", priority=32)
+def _not_first_turn(m):
+    return [Effect(op="requires_later_turn")]
+
+
+@_pattern(r"you can use this card only if your opponent has (\d+) or fewer prize cards remaining", priority=32)
+def _late_game_only(m):
+    return [Effect(op="requires_opponent_prizes", n=int(m.group(1)))]
+
+
+@_pattern(r"you may discard a basic (\{?\w+\}?) energy card from your hand in order to use this ability", priority=32)
+def _ability_energy_cost(m):
+    return [Effect(op="discard_from_hand", n=1, filter="basic_energy")]
+
+
+# ------------------------------------------------------------- board-wide moves
+@_pattern(r"(?:shuffle|put) this pok.mon and all attached cards into your (deck|hand)", priority=32)
+def _recall_self(m):
+    return [Effect(op="recall_self", dest=m.group(1))]
+
+
+@_pattern(r"you may put (\d+) energy attached to your opponent's active pok.mon into their hand", priority=32)
+def _bounce_their_energy(m):
+    return [Effect(op="bounce_energy_target", n=int(m.group(1)))]
+
+
+@_pattern(r"you may shuffle (\d+) energy attached to this pok.mon into your deck", priority=32)
+def _recycle_own_energy(m):
+    return [Effect(op="recycle_energy", n=int(m.group(1)))]
+
+
+@_pattern(r"put (\d+) damage counters? on each of your opponent's pok.mon that has any damage counters on it", priority=32)
+def _finish_the_wounded(m):
+    return [Effect(op="place_counters", n=int(m.group(1)) * 10, dest="wounded")]
+
+
+@_pattern(r"when you attach this card from your hand to a \{?\w+\}? pok.mon,? search your deck for up to (\d+) basic (?:\{?\w+\}? )?pok.mon and put them onto your bench", priority=32)
+def _energy_fetches_basics(m):
+    return [Effect(op="search", n=int(m.group(1)), filter="basic_pokemon", dest="bench")]
+
+
+@_pattern(r"choose 1 of your benched ([\w' ]+?) pok.mon's attacks and use it as this attack", priority=32)
+def _copy_bench_attack(m):
+    return [Effect(op="copy_bench_attack", filter=m.group(1).strip().casefold())]
+
+
+# ---------------------------------------------------------------- the Stadiums
+@_pattern(r"pok.mon tools? attached to each pok.mon \(both yours and your opponent's\) have no effect", priority=32)
+def _tool_lock(m):
+    return [Effect(op="lock_tools")]
+
+
+@_pattern(r"([\w' ]+?) pok.mon in play \(both yours and your opponent's\) have no retreat cost", priority=32)
+def _team_free_retreat(m):
+    return [Effect(op="no_retreat_cost", filter=f"named:{m.group(1).strip().casefold()}")]
+
+
+@_pattern(r"whenever any player puts a basic (?:non-\{?\w+\}? )?pok.mon onto their bench during their turn,? place (\d+) damage counters on that pok.mon", priority=32)
+def _bench_tax(m):
+    return [Effect(op="bench_tax", n=int(m.group(1)) * 10)]
+
+
+@_pattern(r"each player's (\{?\w+\}?) pok.mon can evolve into \1 pok.mon during the turn they play those pok.mon", priority=32)
+def _stadium_rush_evolution(m):
+    return [Effect(op="evolve_early", filter="any")]
+
+
+@_pattern(r"prevent all damage counters from being placed on benched pok.mon", priority=32)
+def _cage(m):
+    return [Effect(op="shield_bench_counters")]
+
+
+@_pattern(r"prevent all effects of your opponent's pok.mon's attacks and abilities done to this pok.mon", priority=32)
+def _effect_immunity(m):
+    return [Effect(op="effect_immune")]
+
+
+@_pattern(r"during pok.mon checkup,? put (\d+) damage counters? on each pok.mon that has an ability", priority=32)
+def _checkup_counters(m):
+    return [Effect(op="checkup_counters", n=int(m.group(1)) * 10, filter="has_ability")]
+
+
+@_pattern(r"your opponent's active pok.mon's retreat cost is (\{?c\}?(?:\{?c\}?)*) more", priority=32)
+def _retreat_tax(m):
+    return [Effect(op="retreat_more", n=max(1, m.group(1).lower().count("c")))]
+
+
+@_pattern(r"you may put an? \{?\w+\}? energy attached to this pok.mon into your hand and have this attack do (\d+) more damage", priority=33)
+def _pitch_for_damage(m):
+    return [Effect(op="energy_to_hand", n=1), Effect(op="bonus_if", n=int(m.group(1)), filter="energy_on_self")]
+
+
+@_pattern(r"when you play this pok.mon from your hand onto your bench during your turn,? you may switch it with your active pok.mon", priority=33)
+def _arrives_swinging(m):
+    return [Effect(op="switch_to_self")]
+
+
+@_pattern(r"each pok.mon that has any energy attached \(both yours and your opponent's\)[^.]*?can't be affected by any special conditions", priority=33)
+def _festival_grounds(m):
+    return [Effect(op="status_immunity", filter="has_energy")]
 
 
 @_pattern(r"once during your turn,? if this pok.mon has any energy attached,? you may use this ability", priority=28)

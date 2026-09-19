@@ -81,9 +81,11 @@ def staged_battle(resolution: Resolution, deck: BattleDeck) -> Battle:
         side.energy_attached = 0
         side.stadium_used = False
         side.retreated = False
-        # A knockout last turn, so a card that may only be played after one
-        # is judged on what it does rather than on a condition we forgot.
+        # A knockout last turn and a late-game prize count, so a card that may
+        # only be played in those spots is judged on what it does rather than
+        # on a condition the staging forgot to set up.
         side.lost_on_turn = battle.turn - 1
+        del side.prizes[:3]
         if side.active is not None:
             side.active.damage = 30
         for spot in side.in_play():
@@ -105,6 +107,17 @@ def staged_battle(resolution: Resolution, deck: BattleDeck) -> Battle:
             if found is not None:
                 side.deck.remove(found)
                 side.discard.append(found)
+    # The top of the deck gets one of everything, so a card that looks at the
+    # top few and takes what it likes has something to take.
+    for side in battle.sides:
+        for wanted in (lambda c: c.category is Category.POKEMON,
+                       lambda c: c.category is Category.ENERGY,
+                       lambda c: c.is_supporter,
+                       lambda c: c.subtype is Subtype.ITEM):
+            found = next((c for c in side.deck if wanted(c)), None)
+            if found is not None:
+                side.deck.remove(found)
+                side.deck.insert(0, found)
     return battle
 
 

@@ -67,6 +67,7 @@ class Spot:
     shield: int = 0
     shield_until: int = -1
     blocked_until: int = -1  # set by "can't attack during your next turn"
+    switched_in_on: int = -1  # the turn it moved to the Active Spot
 
     def copy(self) -> "Spot":
         clone = Spot(stack=list(self.stack), turn_played=self.turn_played)
@@ -81,6 +82,7 @@ class Spot:
         clone.shield = self.shield
         clone.shield_until = self.shield_until
         clone.blocked_until = self.blocked_until
+        clone.switched_in_on = self.switched_in_on
         return clone
 
     @property
@@ -158,10 +160,15 @@ class Spot:
         return [sorted(unit)[0] if unit is not _ANY_TYPE else "Colorless"
                 for unit in self.energy_units()]
 
-    def retreat_cost(self) -> int:
-        """Printed cost, less whatever the attached Tool takes off it."""
+    def retreat_cost(self, tool=None) -> int:
+        """Printed cost, less whatever the attached Tool takes off it.
+
+        The caller passes the Tool that is actually working — a Stadium can
+        switch every Tool in play off.
+        """
         cost = self.card.retreat
-        for effect in self.tool.effects if self.tool else ():
+        tool = self.tool if tool is None else tool
+        for effect in tool.effects if tool else ():
             if effect.op == "retreat_less":
                 cost -= effect.n
             elif effect.op == "no_retreat_cost" and effect.filter == "hurt_holder":
@@ -222,7 +229,7 @@ class Side:
     def shuffle(self, rng: random.Random) -> None:
         rng.shuffle(self.deck)
 
-    def bench_pokemon(self, card: Card, turn: int) -> Spot | None:
+    def bench_pokemon(self, card: Card, turn: int) -> Spot | None:  # noqa: D401
         """Put a Basic onto the Bench. Setup counts as turn one, so nothing
         benched before the game starts can evolve on the first turn."""
         if len(self.bench) >= BENCH_LIMIT:
@@ -260,6 +267,10 @@ class Side:
         self.discard.extend(spot.energy)
         if spot.tool:
             self.discard.append(spot.tool)
+        self.remove_spot(spot)
+
+    def remove_spot(self, spot: Spot) -> None:
+        """Take a Pokémon off the board without sending anything anywhere."""
         if spot is self.active:
             self.active = None
         elif spot in self.bench:
@@ -487,16 +498,26 @@ class Battle:
         return spot.blocked_until < self.turn
 
     def attacks_barred(self, index: int, spot: Spot) -> bool:
-        """Born to Slack: no rule-box Pokémon across the table, no attack."""
+        """Abilities that say when this Pokémon is allowed to attack at all."""
         if self.abilities_locked(index):
             return False
-        if not any(e.op == "attack_needs_rule_box" for e in spot.card.ability):
-            return False
-        return not any(other.card.rule_box for other in self.opponent(index).in_play())
+        for effect in spot.card.ability:
+            if effect.op == "attack_needs_rule_box":
+                if not any(o.card.rule_box for o in self.opponent(index).in_play()):
+                    return True
+            elif effect.op == "attack_needs_team":
+                friends = sum(1 for o in self.sides[index].in_play()
+                              if effect.filter in o.name.casefold())
+                if friends < effect.n:
+                    return True
+        return False
 
     def can_evolve(self, index: int, spot: Spot) -> bool:
         """Evolution normally waits a turn; an Ability can waive that."""
         if spot.turn_played < self.turn:
+            return True
+        if self.stadium is not None and any(
+                e.op == "evolve_early" for e in self.stadium.effects):
             return True
         if self.abilities_locked(index):
             return False
@@ -513,6 +534,16 @@ class Battle:
     # ------------------------------------------------------------- turn end
     def between_turns(self, index: int) -> None:
         """Pokémon Checkup: poison, burn, sleep and paralysis."""
+        for owner in (0, 1):
+            for source, effect in self.team_passives(owner, "checkup_counters"):
+                for side_index in (0, 1):
+                    for spot in list(self.sides[side_index].in_play()):
+                        if spot is source or spot.name == source.name:
+                            continue
+                        if effect.filter == "has_ability" and not spot.card.ability:
+                            continue
+                        self.damage_spot(side_index, spot, effect.n, source=source.name)
+
         for side_index in (index, 1 - index):
             side = self.sides[side_index]
             spot = side.active
@@ -662,6 +693,16 @@ class Battle:
             spare = int(kind.split(":", 1)[1])
             cost = len(self._attacking_cost or ())
             return len(spot.energy_units()) >= cost + spare
+        if kind == "self_damaged":
+            return bool(spot.damage)
+        if kind == "bench_damaged":
+            return any(other.damage for other in side.bench)
+        if kind == "switched_in":
+            return spot.switched_in_on == self.turn
+        if kind == "energy_on_self":
+            return bool(spot.energy)
+        if kind.startswith("thin_deck:"):
+            return len(side.deck) <= int(kind.split(":", 1)[1])
         return False
 
     _attacking_cost: tuple = ()
@@ -669,6 +710,9 @@ class Battle:
     def _counter(self, source: str, side: Side, foe: Side, spot: Spot) -> int:
         if source == "heads":
             return self._heads_flipped
+        if source.startswith("named_in_play:"):
+            wanted = source.split(":", 1)[1]
+            return sum(1 for s in side.in_play() if wanted in s.name.casefold())
         if source.startswith("attack:"):
             wanted = source.split(":", 1)[1].casefold()
             return sum(
@@ -689,6 +733,9 @@ class Battle:
             "damage_counters_on_target": (foe.active.damage // 10) if foe.active else 0,
             "target_energy": len(foe.active.energy) if foe.active else 0,
             "own_in_play": len(side.in_play()),
+            "target_retreat": self.retreat_cost(1 - self.sides.index(side), foe.active)
+                              if foe.active else 0,
+            "opponent_energy_discard": sum(1 for c in foe.discard if c.is_basic_energy),
         }.get(source, 0)
 
     def apply_attack(self, attacker_index: int, attack: Attack) -> None:
@@ -729,9 +776,17 @@ class Battle:
             self._retaliate(attacker_index, spot, target)
         self._dealt = dealt
 
+        blanked = self.effect_immune(target)
         for effect in attack.effects:
+            if blanked and effect.op not in ("coins", "ignore_weakness", "ignore_defences"):
+                continue  # Banette shrugs off the riders, not just the damage
             self.apply_attack_effect(attacker_index, effect, spot, target, plan)
         self.check_knockouts()
+
+    @staticmethod
+    def effect_immune(target: Spot) -> bool:
+        """Is this Pokémon untouched by the effects of attacks and Abilities?"""
+        return any(e.op == "effect_immune" for e in target.card.ability)
 
     _dealt = 0
 
@@ -809,7 +864,8 @@ class Battle:
     def damage_boost(self, index: int, spot: Spot, target: Spot) -> int:
         """Extra damage from the attacker's Tool and from Abilities in play."""
         bonus = 0
-        for effect in spot.tool.effects if spot.tool else ():
+        holder_tool = self.tool_of(spot)
+        for effect in holder_tool.effects if holder_tool else ():
             if effect.op != "boost_damage":
                 continue
             if effect.filter == "holder_vs_rule_box" and not target.card.rule_box:
@@ -828,7 +884,8 @@ class Battle:
     def damage_reduction(self, index: int, target: Spot, attacker: Spot) -> int:
         """Damage the defending Pokémon shrugs off, from its Tool or Ability."""
         reduction = 0
-        for effect in target.tool.effects if target.tool else ():
+        target_tool = self.tool_of(target)
+        for effect in target_tool.effects if target_tool else ():
             if effect.op == "reduce_damage":
                 reduction += effect.n
         if not self.abilities_locked(index):
@@ -848,14 +905,33 @@ class Battle:
                 return _type_for(effect.dest)
         return target.card.weakness
 
+    def tools_locked(self) -> bool:
+        """Jamming Tower: every Pokémon Tool in play is blank while it stands."""
+        return self.stadium is not None and any(
+            e.op == "lock_tools" for e in self.stadium.effects)
+
+    def tool_of(self, spot: Spot):
+        """The Tool actually doing anything on this Pokémon right now."""
+        return None if self.tools_locked() else spot.tool
+
     def retreat_cost(self, index: int, spot: Spot) -> int:
-        """Retreat cost including team Abilities that reduce or remove it."""
-        cost = spot.retreat_cost()
-        for _, effect in self.team_passives(index, "no_retreat_cost"):
+        """Retreat cost, after Abilities and Stadiums have had their say."""
+        cost = spot.retreat_cost(tool=self.tool_of(spot))
+        free = list(self.team_passives(index, "no_retreat_cost"))
+        if self.stadium is not None:
+            free += [(None, e) for e in self.stadium.effects if e.op == "no_retreat_cost"]
+        for _, effect in free:
             if effect.filter == "basic_pokemon" and spot.card.is_basic_pokemon:
                 return 0
+            if effect.filter.startswith("named:"):
+                if effect.filter.split(":", 1)[1] in spot.name.casefold():
+                    return 0
+                continue
             if effect.filter == "any":
                 return 0
+        for _, effect in self.team_passives(1 - index, "retreat_more"):
+            if spot is self.sides[index].active:
+                cost += effect.n
         return cost
 
     def immune(self, target: Spot, attacker: Spot, defender_index: int) -> bool:
@@ -937,6 +1013,8 @@ class Battle:
             self.damage_spot(1 - index, pick, effect.n, source="snipe")
         elif op == "status":
             who = spot if effect.dest == "self" else target
+            if self.status_proof(who):
+                return
             if effect.filter in SPECIAL_CONDITIONS:
                 who.condition = effect.filter
                 who.condition_turn = self.turn
@@ -988,6 +1066,29 @@ class Battle:
             for other in list(foe.in_play()):
                 if other.card.rule_box:
                     self.damage_spot(1 - index, other, effect.n, source="spread")
+        elif op == "ko_target_if":
+            hit = (target.damage == effect.n) if effect.filter == "exact_counters" else bool(
+                target.condition or target.poisoned or target.burned)
+            if hit:
+                target.damage = target.max_hp
+        elif op == "recall_self":
+            zone = side.deck if effect.dest == "deck" else side.hand
+            zone.extend(spot.stack)
+            zone.extend(spot.energy)
+            if spot.tool is not None:
+                zone.append(spot.tool)
+            side.remove_spot(spot)
+            if effect.dest == "deck":
+                side.shuffle(self.rng)
+        elif op == "bounce_energy_target":
+            for _ in range(min(effect.n, len(target.energy))):
+                foe.hand.append(target.energy.pop())
+        elif op == "recycle_energy":
+            for _ in range(min(effect.n, len(spot.energy))):
+                side.deck.append(spot.energy.pop())
+            side.shuffle(self.rng)
+        elif op == "switch_to_self" and spot in side.bench:
+            self.switch_active(index, spot)
         elif op == "end_turn":
             side.turn_over = True
         elif op == "self_mill":
@@ -1079,7 +1180,8 @@ class Battle:
                 side.lost_pokemon += 1
                 side.lost_on_turn = self.turn
                 bonus = taker.extra_prizes if spot.card.is_basic_pokemon else 0
-                shield = sum(e.n for e in (spot.tool.effects if spot.tool else ())
+                shield_tool = self.tool_of(spot)
+                shield = sum(e.n for e in (shield_tool.effects if shield_tool else ())
                              if e.op == "prize_reduction")
                 owed = max(1, spot.prize_value + bonus - shield)
                 self.take_prizes(winner, owed)
@@ -1119,6 +1221,7 @@ class Battle:
         side.bench.remove(spot)
         side.bench.append(current)
         side.active = spot
+        spot.switched_in_on = self.turn
         current.condition = None  # conditions clear when a Pokémon leaves the Active Spot
         current.poisoned = False
         current.burned = False
@@ -1174,16 +1277,52 @@ class Battle:
         if side.active is None:
             return []
         attacks = list(side.active.card.attacks)
-        if self.copies_bench_attacks(side.active):
+        borrow = self.copies_bench_attacks(side.active)
+        if borrow is not None:
             for spot in side.bench:
+                if borrow and borrow not in spot.name.casefold():
+                    continue
                 attacks.extend(spot.card.attacks)
         return [a for a in attacks
                 if self.can_pay(side.active, a) and not self.attack_blocked(index, a)]
 
     @staticmethod
-    def copies_bench_attacks(spot: Spot) -> bool:
+    def copies_bench_attacks(spot: Spot) -> str | None:
+        """Whose attacks this Pokémon may borrow: "" for any, a name, or None.
+
+        Mew ex takes any Benched Pokémon's attack; N's Zoroark ex only an N's
+        Pokémon's, so the filter the compiler read comes back with it.
+        """
+        for effect in spot.card.ability:
+            if effect.op == "copy_bench_attack":
+                return effect.filter if effect.filter != "any" else ""
         text = (spot.card.ability_text or "").lower()
-        return "use the attacks of any of your benched" in text
+        return "" if "use the attacks of any of your benched" in text else None
+
+    def on_benched(self, index: int, spot: Spot) -> None:
+        """What the board does to a Pokémon the moment it arrives on the Bench."""
+        if self.stadium is None:
+            return
+        for effect in self.stadium.effects:
+            if effect.op == "bench_tax" and spot.card.is_basic_pokemon:
+                self.damage_spot(index, spot, effect.n, source=self.stadium.name)
+        self.check_knockouts()
+
+    def counters_shielded(self, spot: Spot, index: int) -> bool:
+        """Battle Cage: damage counters do not land on a Bench while it stands."""
+        if self.stadium is None or spot is self.sides[index].active:
+            return False
+        return any(e.op == "shield_bench_counters" for e in self.stadium.effects)
+
+    def status_proof(self, spot: Spot) -> bool:
+        """Festival Grounds: anything with Energy on it shrugs off Conditions."""
+        if self.stadium is None:
+            return False
+        for effect in self.stadium.effects:
+            if effect.op == "status_immunity":
+                if effect.filter != "has_energy" or spot.energy:
+                    return True
+        return False
 
     def stadium_ability(self, index: int):
         """The Stadium effect this player may still use this turn, if any."""

@@ -37,6 +37,11 @@ def gated(battle, index: int, effects, spot) -> bool:
             side = battle.sides[index]
             if side.lost_on_turn < battle.turn - 1:
                 return True
+        if effect.op == "requires_later_turn" and battle.turn <= 2:
+            return True
+        if effect.op == "requires_opponent_prizes":
+            if battle.opponent(index).prizes_left() > effect.n:
+                return True
     return False
 
 
@@ -131,6 +136,14 @@ def useful(battle, index: int, effects, spot=None) -> bool:
             return True
         if op == "swap_from_discard" and any(c.is_basic_pokemon for c in side.discard):
             return True
+        if op == "switch_to_self" and spot is not None and spot in side.bench:
+            return True
+        if op == "bounce_energy_target":
+            foe_active = battle.opponent(index).active
+            if foe_active is not None and foe_active.energy:
+                return True
+        if op == "recall_self":
+            continue  # a retreat in disguise: never the reason to use an Ability
         if op == "opponent_discard_to" and len(battle.opponent(index).hand) > effect.n:
             return True
         if op == "opponent_discard_filter" and any(
@@ -226,6 +239,22 @@ def _apply(battle, index: int, effect: Effect, spot) -> None:
             side.discard.append(side.deck.pop(0))
     elif op == "swap_from_discard":
         _swap_from_discard(battle, index)
+    elif op == "recall_self" and spot is not None:
+        zone = side.deck if effect.dest == "deck" else side.hand
+        zone.extend(spot.stack)
+        zone.extend(spot.energy)
+        if spot.tool is not None:
+            zone.append(spot.tool)
+        side.remove_spot(spot)
+        if effect.dest == "deck":
+            side.shuffle(battle.rng)
+    elif op == "switch_to_self" and spot is not None and spot in side.bench:
+        battle.switch_active(index, spot)
+    elif op == "bounce_energy_target":
+        foe = battle.opponent(index)
+        if foe.active is not None:
+            for _ in range(min(effect.n, len(foe.active.energy))):
+                foe.hand.append(foe.active.energy.pop())
     elif op == "ko_self":
         if spot is not None:
             spot.damage = spot.max_hp
@@ -348,6 +377,12 @@ def _place_counters(battle, index: int, effect: Effect) -> None:
     targets = [foe.active] if effect.dest == "active" and foe.active else foe.in_play()
     if not targets:
         return
+    if effect.dest == "wounded":
+        for spot in [s for s in targets if s.damage]:
+            if not battle.counters_shielded(spot, 1 - index):
+                battle.damage_spot(1 - index, spot, effect.n, source="damage counters")
+        battle.check_knockouts()
+        return
     wanted = int(effect.dest.split(":", 1)[1]) if effect.dest.startswith("many:") else 1
     remaining = list(targets)
     for _ in range(min(wanted, len(remaining))):
@@ -356,6 +391,8 @@ def _place_counters(battle, index: int, effect: Effect) -> None:
             remaining, key=lambda s: (s.prize_value, -s.remaining_hp)
         )
         remaining.remove(pick)
+        if battle.counters_shielded(pick, 1 - index):
+            continue
         battle.damage_spot(1 - index, pick, effect.n, source="damage counters")
 
 

@@ -118,12 +118,12 @@ def test_an_ability_can_copy_benched_attacks():
     side.active = Spot(stack=[resolution.get("Mew ex")], turn_played=1,
                        energy=[pool.lookup("Basic Water Energy")] * 2)
     side.bench = [Spot(stack=[resolution.get("Tympole")], turn_played=1)]
-    assert battle.copies_bench_attacks(side.active)
+    assert battle.copies_bench_attacks(side.active) == ""  # any Benched Pokémon
     assert "Round" in {a.name for a in battle.usable_attacks(0)}
 
     side.active = Spot(stack=[resolution.get("Tympole")], turn_played=1,
                        energy=[pool.lookup("Basic Water Energy")] * 2)
-    assert not battle.copies_bench_attacks(side.active)
+    assert battle.copies_bench_attacks(side.active) is None
 
 
 def test_hand_disruption_trims_the_opponent():

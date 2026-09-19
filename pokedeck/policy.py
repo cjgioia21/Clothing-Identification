@@ -155,6 +155,9 @@ class Policy:
         return True
 
     def on_bench(self, battle, index: int, spot) -> None:
+        battle.on_benched(index, spot)
+        if spot.knocked_out:
+            return
         card = spot.card
         if battle.abilities_locked(index):
             return
